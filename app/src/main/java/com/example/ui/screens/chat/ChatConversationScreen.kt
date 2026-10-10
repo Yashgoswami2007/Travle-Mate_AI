@@ -13,6 +13,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,6 +46,9 @@ fun ChatConversationScreen(convId: String, viewModel: MainViewModel) {
     val coroutineScope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     var expandedMessageId by remember { mutableStateOf<String?>(null) }
+    
+    var showAttachmentMenu by remember { mutableStateOf(false) }
+    var showFacialRecognition by remember { mutableStateOf(false) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -99,6 +107,10 @@ fun ChatConversationScreen(convId: String, viewModel: MainViewModel) {
                 convId = convId,
                 viewModel = viewModel,
                 onClose = { isGroupInfoOpen = false }
+            )
+        } else if (showFacialRecognition) {
+            FacialRecognitionOverlay(
+                onClose = { showFacialRecognition = false }
             )
         } else {
             Column(
@@ -223,11 +235,51 @@ fun ChatConversationScreen(convId: String, viewModel: MainViewModel) {
                         .imePadding(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = { filePickerLauncher.launch("*/*") },
-                        modifier = Modifier.padding(end = 4.dp)
-                    ) {
-                        Icon(Icons.Filled.AttachFile, contentDescription = "Attach", tint = TravelNavyPrimary)
+                    Box {
+                        IconButton(
+                            onClick = { showAttachmentMenu = true },
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = "Attach", tint = TravelNavyPrimary)
+                        }
+                        
+                        DropdownMenu(
+                            expanded = showAttachmentMenu,
+                            onDismissRequest = { showAttachmentMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Photos") },
+                                leadingIcon = { Icon(Icons.Filled.Image, contentDescription = null, tint = TravelNavyPrimary) },
+                                onClick = { 
+                                    showAttachmentMenu = false
+                                    filePickerLauncher.launch("image/*") 
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Videos") },
+                                leadingIcon = { Icon(Icons.Filled.Videocam, contentDescription = null, tint = TravelNavyPrimary) },
+                                onClick = { 
+                                    showAttachmentMenu = false
+                                    filePickerLauncher.launch("video/*") 
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Document") },
+                                leadingIcon = { Icon(Icons.Filled.InsertDriveFile, contentDescription = null, tint = TravelNavyPrimary) },
+                                onClick = { 
+                                    showAttachmentMenu = false
+                                    filePickerLauncher.launch("application/*") 
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Facial Recognition") },
+                                leadingIcon = { Icon(Icons.Filled.Face, contentDescription = null, tint = TravelNavyPrimary) },
+                                onClick = { 
+                                    showAttachmentMenu = false
+                                    showFacialRecognition = true
+                                }
+                            )
+                        }
                     }
 
                     OutlinedTextField(

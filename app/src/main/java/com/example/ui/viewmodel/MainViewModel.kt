@@ -25,6 +25,7 @@ sealed class Screen {
     object Auth : Screen()
     object ChatInbox : Screen()
     data class ChatConversation(val convId: String) : Screen()
+    object Onboarding : Screen()
 }
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -48,12 +49,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val pendingInvitations = collabRepo.pendingInvitations
     val tripMembersMap = collabRepo.tripMembers
 
+    private val prefs = application.getSharedPreferences("tripmate_prefs", android.content.Context.MODE_PRIVATE)
+    val isOnboardingCompleted = MutableStateFlow(prefs.getBoolean("onboarding_completed", false))
+
     // Current Screen
-    private val _currentScreen = MutableStateFlow<Screen>(Screen.Home)
+    private val _currentScreen = MutableStateFlow<Screen>(if (isOnboardingCompleted.value) Screen.Home else Screen.Onboarding)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
     // Screen stack for back navigation
-    private val screenStack = mutableListOf<Screen>(Screen.Home)
+    private val screenStack = mutableListOf<Screen>(if (isOnboardingCompleted.value) Screen.Home else Screen.Onboarding)
 
     // Current User
     val currentUser: StateFlow<UserEntity?> = userRepo.getActiveUserFlow()
@@ -234,20 +238,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isSearchingLocations = MutableStateFlow(false)
 
     // Wizard State
-    val wizardStartDate = MutableStateFlow(com.example.domain.ai.TravelDateUtils.formatDisplayDate(java.time.LocalDate.now().plusDays(14)))
-    val wizardEndDate = MutableStateFlow(com.example.domain.ai.TravelDateUtils.formatDisplayDate(java.time.LocalDate.now().plusDays(17)))
-    val wizardDays = MutableStateFlow(4)
-    val wizardSelectedDestination = MutableStateFlow("Jaipur")
-    val wizardBudget = MutableStateFlow("25000")
-    val wizardStartingCity = MutableStateFlow("Delhi")
+    val wizardStartDate = MutableStateFlow("")
+    val wizardEndDate = MutableStateFlow("")
+    val wizardDays = MutableStateFlow(0)
+    val wizardSelectedDestination = MutableStateFlow("")
+    val wizardBudget = MutableStateFlow("")
+    val wizardStartingCity = MutableStateFlow("")
     val wizardTravellers = MutableStateFlow(2)
     val wizardTravellerType = MutableStateFlow("Couple") // Solo, Couple, Friends, Family
     val wizardQuestions = MutableStateFlow(
         com.example.domain.ai.ItineraryPlannerWizard.buildAdaptiveQuestions(
-            destination = "Jaipur",
-            origin = "Delhi",
-            days = 4,
-            budget = 25000.0,
+            destination = "",
+            origin = "",
+            days = 0,
+            budget = 0.0,
             travellerType = "Couple",
             travellerCount = 2
         )
@@ -266,7 +270,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setWizardTravellers(count: Int) {
-        wizardTravellers.value = count.coerceIn(1, 20)
+        wizardTravellers.value = count
         refreshWizardQuestions()
     }
 
@@ -291,10 +295,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshWizardQuestions() {
-        val dest = wizardSelectedDestination.value.trim().ifBlank { "Jaipur" }
-        val orig = wizardStartingCity.value.trim().ifBlank { "Delhi" }
+        val dest = wizardSelectedDestination.value.trim()
+        val orig = wizardStartingCity.value.trim()
         val days = wizardDays.value
-        val budgetVal = wizardBudget.value.toDoubleOrNull() ?: 25000.0
+        val budgetVal = wizardBudget.value.toDoubleOrNull() ?: 0.0
         val type = wizardTravellerType.value
         val count = wizardTravellers.value
 
@@ -312,7 +316,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // User Location
-    val userLocationName = MutableStateFlow("Delhi, India")
+    val userLocationName = MutableStateFlow(prefs.getString("user_location", "Delhi, India") ?: "Delhi, India")
     val isLocationPermissionGranted = MutableStateFlow(false)
 
     // Live Data & AI Status
@@ -625,8 +629,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     startDate = wizardStartDate.value,
                     endDate = wizardEndDate.value,
                     numberOfDays = daysCount,
-                    travellersCount = wizardTravellers.value,
-                    travellersDescription = "${wizardTravellerType.value} (${wizardTravellers.value} Travelers)",
+                    travellersCount = wizardTravellers.value.coerceAtLeast(1),
+                    travellersDescription = "${wizardTravellerType.value} (${wizardTravellers.value.coerceAtLeast(1)} Travelers)",
                     startingLocation = startingCity,
                     totalBudget = totalBudgetVal,
                     spentBudget = 0.0,
@@ -714,6 +718,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             destRepo.togglePlaceSaved(placeId, !currentStatus)
             _toastMessage.emit(if (!currentStatus) "Saved to your places" else "Removed from saved")
+        }
+    }
+
+    fun completeOnboarding(fullName: String, username: String, dob: String, location: String) {
+        prefs.edit()
+            .putBoolean("onboarding_completed", true)
+            .putString("user_location", location)
+            .apply()
+        isOnboardingCompleted.value = true
+        userLocationName.value = location
+        
+        // Update user profile via repository
+        viewModelScope.launch {
+            val user = currentUser.value ?: SeedData.initialUser
+            val updatedUser = user.copy(
+                name = fullName,
+                homeLocation = location
+            )
+            db.userDao().insertUser(updatedUser) // Since it's an Upsert, this will update it
+            
+            // Note: username and dob are collected but might require schema changes to persist fully.
+            // We store them locally for now if needed.
+            
+            // Navigate to Home and clear stack
+            screenStack.clear()
+            screenStack.add(Screen.Home)
+            _currentScreen.value = Screen.Home
         }
     }
 

@@ -199,10 +199,15 @@ fun ProfileScreen(
                                     modifier = Modifier
                                         .size(44.dp)
                                         .clip(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.2f)),
+                                        .background(Color.White)
+                                        .padding(5.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Filled.AccountCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                                    androidx.compose.foundation.Image(
+                                        painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.ic_official_logo),
+                                        contentDescription = "TripMate AI Official Logo",
+                                        modifier = Modifier.fillMaxSize()
+                                    )
                                 }
                                 Column {
                                     Text("Sign In to TripMate", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = Color.White)
@@ -269,8 +274,10 @@ fun ProfileScreen(
                                                 color = Color.White.copy(alpha = 0.75f)
                                             )
                                         }
+                                        val rawEmail = currentSession?.email ?: user.email
+                                        val censoredEmail = rawEmail.takeIf { it.isNotBlank() }?.let { if (it.contains("@")) "${it.take(2)}***@***.com" else "***" } ?: ""
                                         Text(
-                                            text = currentSession?.email ?: user.email,
+                                            text = censoredEmail,
                                             fontSize = 12.sp,
                                             color = Color.White.copy(alpha = 0.85f)
                                         )
@@ -499,32 +506,7 @@ fun ProfileScreen(
                 }
             }
 
-            // Switch to Demo Account quick helper
-            item {
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = TravelSurfaceVariant),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Demo Travel Persona", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text(
-                            text = "Currently running with full offline persistence, real-time AI action engine, and realistic mock providers for Pune, Jaipur, Goa, Delhi, and Manali.",
-                            fontSize = 12.sp,
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = { viewModel.loadDemoData() },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TravelNavyPrimary),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Load Demo Data")
-                        }
-                    }
-                }
-            }
+
 
             item {
                 Spacer(modifier = Modifier.height(90.dp))

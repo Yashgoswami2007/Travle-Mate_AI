@@ -1,8 +1,10 @@
 package com.example.ui.screens.trip
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -42,30 +44,34 @@ fun TripsListScreen(
                 containerColor = TravelNavyPrimary,
                 modifier = Modifier
                     .testTag("plan_new_trip_fab")
-                    .padding(bottom = 72.dp)
+                    .padding(bottom = 16.dp)
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 340.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "My Trips (${trips.size})",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "Your active workspaces, itineraries, and travel budgets",
-                    fontSize = 13.sp,
-                    color = TextSecondary
-                )
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "My Trips (${trips.size})",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Your active workspaces, itineraries, and travel budgets",
+                        fontSize = 13.sp,
+                        color = TextSecondary
+                    )
+                }
             }
 
             items(trips) { trip ->
@@ -76,7 +82,7 @@ fun TripsListScreen(
                 )
             }
 
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 Spacer(modifier = Modifier.height(80.dp))
             }
         }

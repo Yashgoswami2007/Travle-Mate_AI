@@ -99,7 +99,7 @@ fun HomeScreen(
                 containerColor = TravelNavyPrimary,
                 modifier = Modifier
                     .testTag("home_ai_fab")
-                    .padding(bottom = 72.dp) // accommodate bottom nav bar
+                    .padding(bottom = 16.dp) // accommodate bottom nav bar
             )
         }
     ) { innerPadding ->
@@ -152,11 +152,11 @@ fun HomeScreen(
                             .clickable { viewModel.navigateTo(Screen.Profile) },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = currentUser?.avatarInitials ?: "TM",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
+                        AsyncImage(
+                            model = "https://i.pravatar.cc/150?u=${currentUser?.id ?: "1"}",
+                            contentDescription = "Profile Picture",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
@@ -188,10 +188,15 @@ fun HomeScreen(
                                     modifier = Modifier
                                         .size(36.dp)
                                         .clip(CircleShape)
-                                        .background(TravelTerracotta),
+                                        .background(Color.White)
+                                        .padding(4.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Default.AccountCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                    androidx.compose.foundation.Image(
+                                        painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.ic_official_logo),
+                                        contentDescription = "TripMate AI Official Logo",
+                                        modifier = Modifier.fillMaxSize()
+                                    )
                                 }
                                 Column {
                                     Text("Sign In...", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TravelNavyDark)
