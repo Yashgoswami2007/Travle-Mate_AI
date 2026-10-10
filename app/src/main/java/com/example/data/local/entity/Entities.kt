@@ -65,19 +65,49 @@ data class ItineraryItemEntity(
     val orderIndex: Int = 0
 )
 
+@Entity(tableName = "saved_participants")
+data class SavedParticipantEntity(
+    @PrimaryKey val id: String, // Participant / Device ID
+    val name: String,
+    val username: String = "",
+    val email: String = "",
+    val avatarColorHex: String = "#1E3A5F",
+    val addedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "settlements")
+data class SettlementEntity(
+    @PrimaryKey val id: String,
+    val tripId: String,
+    val payerMemberId: String,
+    val payerName: String,
+    val receiverMemberId: String,
+    val receiverName: String,
+    val amountInPaise: Long,
+    val date: String = "Today",
+    val notes: String = "",
+    val updatedAt: Long = System.currentTimeMillis()
+) {
+    val amount: Double get() = amountInPaise / 100.0
+}
+
 @Entity(tableName = "expenses")
 data class ExpenseEntity(
     @PrimaryKey val id: String,
     val tripId: String,
     val title: String,
     val category: String, // Transport, Accommodation, Food, Activities, Shopping, Other
-    val amount: Double,
+    val amountInPaise: Long,
     val paidByMemberId: String,
     val paidByMemberName: String,
-    val splitType: String = "EQUAL", // EQUAL, EXACT, PERCENTAGE
-    val date: String,
-    val notes: String = ""
-)
+    val splitType: String = "EQUAL", // EQUAL, CUSTOM
+    val participantIdsJson: String = "", // Comma-separated or JSON list of selected participant IDs
+    val date: String = "Today",
+    val notes: String = "",
+    val updatedAt: Long = System.currentTimeMillis()
+) {
+    val amount: Double get() = amountInPaise / 100.0
+}
 
 @Entity(tableName = "expense_splits")
 data class ExpenseSplitEntity(
@@ -86,14 +116,18 @@ data class ExpenseSplitEntity(
     val tripId: String,
     val memberId: String,
     val memberName: String,
-    val shareAmount: Double,
-    val isSettled: Boolean = false
-)
+    val shareAmountInPaise: Long,
+    val isSettled: Boolean = false,
+    val updatedAt: Long = System.currentTimeMillis()
+) {
+    val shareAmount: Double get() = shareAmountInPaise / 100.0
+}
 
 @Entity(tableName = "group_members")
 data class GroupMemberEntity(
     @PrimaryKey val id: String,
     val tripId: String,
+    val participantId: String = "", // Links to SavedParticipant / DeviceUser ID
     val name: String,
     val email: String = "",
     val avatarColorHex: String = "#1E3A5F",

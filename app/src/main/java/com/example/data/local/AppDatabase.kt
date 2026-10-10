@@ -29,9 +29,11 @@ import kotlinx.coroutines.launch
         SearchHistoryEntity::class,
         ChatMessageEntity::class,
         UserSavedDestinationEntity::class,
-        ImageCacheEntity::class
+        ImageCacheEntity::class,
+        SavedParticipantEntity::class,
+        SettlementEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,6 +46,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun travelSearchDao(): TravelSearchDao
     abstract fun expenseDao(): ExpenseDao
     abstract fun chatDao(): ChatDao
+    abstract fun savedParticipantDao(): SavedParticipantDao
+    abstract fun settlementDao(): SettlementDao
 
     companion object {
         @Volatile

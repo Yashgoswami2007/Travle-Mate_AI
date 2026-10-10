@@ -206,8 +206,41 @@ interface TravelSearchDao {
 }
 
 @Dao
+interface SavedParticipantDao {
+    @Query("SELECT * FROM saved_participants ORDER BY addedAt DESC")
+    fun getAllSavedParticipants(): Flow<List<SavedParticipantEntity>>
+
+    @Query("SELECT * FROM saved_participants WHERE id = :id")
+    suspend fun getSavedParticipantById(id: String): SavedParticipantEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertParticipant(participant: SavedParticipantEntity)
+
+    @Delete
+    suspend fun deleteParticipant(participant: SavedParticipantEntity)
+}
+
+@Dao
+interface SettlementDao {
+    @Query("SELECT * FROM settlements WHERE tripId = :tripId ORDER BY updatedAt DESC")
+    fun getSettlementsForTrip(tripId: String): Flow<List<SettlementEntity>>
+
+    @Query("SELECT * FROM settlements WHERE tripId = :tripId")
+    suspend fun getSettlementsForTripSync(tripId: String): List<SettlementEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSettlement(settlement: SettlementEntity)
+
+    @Delete
+    suspend fun deleteSettlement(settlement: SettlementEntity)
+
+    @Query("DELETE FROM settlements WHERE tripId = :tripId")
+    suspend fun clearSettlementsForTrip(tripId: String)
+}
+
+@Dao
 interface ExpenseDao {
-    @Query("SELECT * FROM expenses WHERE tripId = :tripId ORDER BY date DESC")
+    @Query("SELECT * FROM expenses WHERE tripId = :tripId ORDER BY updatedAt DESC")
     fun getExpensesForTrip(tripId: String): Flow<List<ExpenseEntity>>
 
     @Query("SELECT * FROM expenses WHERE tripId = :tripId")
@@ -216,21 +249,58 @@ interface ExpenseDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertExpense(expense: ExpenseEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertExpenses(expenses: List<ExpenseEntity>)
+
     @Delete
     suspend fun deleteExpense(expense: ExpenseEntity)
+
+    @Query("DELETE FROM expenses WHERE id = :expenseId")
+    suspend fun deleteExpenseById(expenseId: String)
 
     @Query("SELECT * FROM expense_splits WHERE tripId = :tripId")
     fun getSplitsForTrip(tripId: String): Flow<List<ExpenseSplitEntity>>
 
+    @Query("SELECT * FROM expense_splits WHERE tripId = :tripId")
+    suspend fun getSplitsForTripSync(tripId: String): List<ExpenseSplitEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSplits(splits: List<ExpenseSplitEntity>)
+
+    @Query("DELETE FROM expense_splits WHERE expenseId = :expenseId")
+    suspend fun deleteSplitsForExpense(expenseId: String)
 
     @Query("UPDATE expense_splits SET isSettled = :isSettled WHERE id = :splitId")
     suspend fun updateSplitSettled(splitId: String, isSettled: Boolean)
 
+    @Query("DELETE FROM expenses WHERE tripId = :tripId")
+    suspend fun deleteExpensesForTrip(tripId: String)
+
+    @Query("DELETE FROM expense_splits WHERE tripId = :tripId")
+    suspend fun deleteSplitsForTrip(tripId: String)
+
+    @Transaction
+    suspend fun reconcileExpensesAndSplitsForTrip(
+        tripId: String,
+        expenses: List<ExpenseEntity>,
+        splits: List<ExpenseSplitEntity>
+    ) {
+        deleteSplitsForTrip(tripId)
+        deleteExpensesForTrip(tripId)
+        if (expenses.isNotEmpty()) {
+            insertExpenses(expenses)
+        }
+        if (splits.isNotEmpty()) {
+            insertSplits(splits)
+        }
+    }
+
     // Group Members
     @Query("SELECT * FROM group_members WHERE tripId = :tripId")
     fun getMembersForTrip(tripId: String): Flow<List<GroupMemberEntity>>
+
+    @Query("SELECT * FROM group_members WHERE tripId = :tripId")
+    suspend fun getMembersForTripSync(tripId: String): List<GroupMemberEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMember(member: GroupMemberEntity)

@@ -1340,10 +1340,11 @@ object SeedData {
             tripId = "trip_jaipur_couple",
             title = "Shahpura House 3 Nights",
             category = "Accommodation",
-            amount = 8400.0,
+            amountInPaise = 840000L,
             paidByMemberId = "mem_1",
             paidByMemberName = "Yash",
             splitType = "EQUAL",
+            participantIdsJson = "mem_1,mem_2",
             date = "Nov 12, 2026",
             notes = "Deluxe Heritage Room"
         ),
@@ -1352,10 +1353,11 @@ object SeedData {
             tripId = "trip_jaipur_couple",
             title = "Delhi-Jaipur Train Tickets (x2)",
             category = "Transport",
-            amount = 1360.0,
+            amountInPaise = 136000L,
             paidByMemberId = "mem_1",
             paidByMemberName = "Yash",
             splitType = "EQUAL",
+            participantIdsJson = "mem_1,mem_2",
             date = "Nov 12, 2026",
             notes = "Shatabdi Chair Car"
         ),
@@ -1364,10 +1366,11 @@ object SeedData {
             tripId = "trip_jaipur_couple",
             title = "LMB Lunch & Sweets",
             category = "Food",
-            amount = 750.0,
+            amountInPaise = 75000L,
             paidByMemberId = "mem_2",
             paidByMemberName = "Ananya",
             splitType = "EQUAL",
+            participantIdsJson = "mem_1,mem_2",
             date = "Nov 12, 2026",
             notes = "Rajasthani Thali"
         ),
@@ -1376,24 +1379,25 @@ object SeedData {
             tripId = "trip_jaipur_couple",
             title = "Amber Fort & Audio Guides",
             category = "Activities",
-            amount = 600.0,
+            amountInPaise = 60000L,
             paidByMemberId = "mem_2",
             paidByMemberName = "Ananya",
             splitType = "EQUAL",
+            participantIdsJson = "mem_1,mem_2",
             date = "Nov 13, 2026",
             notes = "Composite entry tickets"
         )
     )
 
     val defaultSplits = listOf(
-        ExpenseSplitEntity("sp_1", "exp_hotel", "trip_jaipur_couple", "mem_1", "Yash", 4200.0, true),
-        ExpenseSplitEntity("sp_2", "exp_hotel", "trip_jaipur_couple", "mem_2", "Ananya", 4200.0, false),
-        ExpenseSplitEntity("sp_3", "exp_train", "trip_jaipur_couple", "mem_1", "Yash", 680.0, true),
-        ExpenseSplitEntity("sp_4", "exp_train", "trip_jaipur_couple", "mem_2", "Ananya", 680.0, false),
-        ExpenseSplitEntity("sp_5", "exp_lunch", "trip_jaipur_couple", "mem_1", "Yash", 375.0, false),
-        ExpenseSplitEntity("sp_6", "exp_lunch", "trip_jaipur_couple", "mem_2", "Ananya", 375.0, true),
-        ExpenseSplitEntity("sp_7", "exp_forts", "trip_jaipur_couple", "mem_1", "Yash", 300.0, false),
-        ExpenseSplitEntity("sp_8", "exp_forts", "trip_jaipur_couple", "mem_2", "Ananya", 300.0, true)
+        ExpenseSplitEntity("sp_1", "exp_hotel", "trip_jaipur_couple", "mem_1", "Yash", 420000L, true),
+        ExpenseSplitEntity("sp_2", "exp_hotel", "trip_jaipur_couple", "mem_2", "Ananya", 420000L, false),
+        ExpenseSplitEntity("sp_3", "exp_train", "trip_jaipur_couple", "mem_1", "Yash", 68000L, true),
+        ExpenseSplitEntity("sp_4", "exp_train", "trip_jaipur_couple", "mem_2", "Ananya", 68000L, false),
+        ExpenseSplitEntity("sp_5", "exp_lunch", "trip_jaipur_couple", "mem_1", "Yash", 37500L, false),
+        ExpenseSplitEntity("sp_6", "exp_lunch", "trip_jaipur_couple", "mem_2", "Ananya", 37500L, true),
+        ExpenseSplitEntity("sp_7", "exp_forts", "trip_jaipur_couple", "mem_1", "Yash", 30000L, false),
+        ExpenseSplitEntity("sp_8", "exp_forts", "trip_jaipur_couple", "mem_2", "Ananya", 30000L, true)
     )
 
     val defaultBookings = listOf(

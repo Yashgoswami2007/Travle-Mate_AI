@@ -110,17 +110,97 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val savedDestinations: StateFlow<List<UserSavedDestinationEntity>> = userRepo.getSavedDestinations()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val deviceIdentityManager = com.example.data.repository.DeviceIdentityManager(application)
+    val deviceUserIdentity = deviceIdentityManager.identityState
+
+    val savedParticipants: StateFlow<List<SavedParticipantEntity>> = tripRepo.getSavedParticipants()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // Expenses & Members for current trip
     val currentExpenses: StateFlow<List<ExpenseEntity>> = _selectedTripId
         .flatMapLatest { id -> tripRepo.getExpenses(id) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val currentMembers: StateFlow<List<GroupMemberEntity>> = _selectedTripId
-        .flatMapLatest { id -> tripRepo.getMembers(id) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val currentMembers: StateFlow<List<GroupMemberEntity>> = combine(_selectedTripId, deviceUserIdentity) { tripId, identity ->
+        tripId to identity
+    }.flatMapLatest { (id, identity) ->
+        tripRepo.getMembers(id).map { members ->
+            val currentDeviceId = identity?.deviceId
+            val currentUsername = identity?.username
+            members.map { mem ->
+                val isSelf = (currentDeviceId != null && (mem.participantId == currentDeviceId || mem.id == currentDeviceId)) ||
+                        (!currentUsername.isNullOrBlank() && mem.name.equals(currentUsername, ignoreCase = true)) ||
+                        mem.isCurrentUser
+                mem.copy(isCurrentUser = isSelf)
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val currentSplits: StateFlow<List<ExpenseSplitEntity>> = _selectedTripId
         .flatMapLatest { id -> tripRepo.getSplits(id) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val currentSettlements: StateFlow<List<SettlementEntity>> = _selectedTripId
+        .flatMapLatest { id -> tripRepo.getSettlements(id) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val isRefreshingExpenses = MutableStateFlow(false)
+
+    fun refreshExpenses() {
+        viewModelScope.launch {
+            isRefreshingExpenses.value = true
+            tripRepo.syncTripData(_selectedTripId.value)
+            isRefreshingExpenses.value = false
+        }
+    }
+
+    val currentNetBalances: StateFlow<List<com.example.domain.expense.MemberBalance>> = combine(
+        currentMembers,
+        currentExpenses,
+        currentSplits,
+        currentSettlements
+    ) { members, expenses, splits, settlements ->
+        val memberPairs = members.map { it.id to it.name }
+
+        val expenseCalculationDataList = mutableListOf<com.example.domain.expense.ExpenseCalculationData>()
+        for (exp in expenses) {
+            expenseCalculationDataList.add(
+                com.example.domain.expense.ExpenseCalculationData(
+                    memberId = exp.paidByMemberId,
+                    memberName = exp.paidByMemberName,
+                    paidAmountInPaise = exp.amountInPaise,
+                    shareAmountInPaise = 0L
+                )
+            )
+        }
+        for (split in splits) {
+            expenseCalculationDataList.add(
+                com.example.domain.expense.ExpenseCalculationData(
+                    memberId = split.memberId,
+                    memberName = split.memberName,
+                    paidAmountInPaise = 0L,
+                    shareAmountInPaise = split.shareAmountInPaise
+                )
+            )
+        }
+
+        val settlementRecordDataList = settlements.map { s ->
+            com.example.domain.expense.SettlementRecordData(
+                payerMemberId = s.payerMemberId,
+                receiverMemberId = s.receiverMemberId,
+                amountInPaise = s.amountInPaise
+            )
+        }
+
+        com.example.domain.expense.ExpenseEngine.calculateNetBalances(
+            members = memberPairs,
+            expenseRecords = expenseCalculationDataList,
+            settlementRecords = settlementRecordDataList
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val currentPairwiseDebts: StateFlow<List<com.example.domain.expense.PairwiseDebt>> = currentNetBalances
+        .map { balances -> com.example.domain.expense.ExpenseEngine.calculatePairwiseDebts(balances) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val currentBookings: StateFlow<List<BookingEntity>> = _selectedTripId
@@ -264,6 +344,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 chatRepo.refreshConversations()
             }
         }
+
+        viewModelScope.launch {
+            deviceUserIdentity.collect { identity ->
+                if (identity != null) {
+                    tripRepo.fetchTripsForUser(identity.deviceId)
+                }
+            }
+        }
+
+        // Automatic polling for real-time feel
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(5000)
+                val current = _currentScreen.value
+                if (current == Screen.Expenses || current is Screen.TripDetail || current is Screen.AiChat) {
+                    tripRepo.syncTripData(_selectedTripId.value)
+                } else if (current == Screen.Trips || current == Screen.Home) {
+                    val identity = deviceUserIdentity.value
+                    if (identity != null) {
+                        tripRepo.fetchTripsForUser(identity.deviceId)
+                    }
+                }
+            }
+        }
     }
 
     // Explicitly load demo data if requested (e.g. from ProfileScreen)
@@ -293,6 +397,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_currentScreen.value != screen) {
             screenStack.add(screen)
             _currentScreen.value = screen
+            
+            if (screen == Screen.Expenses || screen is Screen.TripDetail || screen is Screen.AiChat) {
+                viewModelScope.launch {
+                    tripRepo.syncTripData(_selectedTripId.value)
+                }
+            } else if (screen == Screen.Trips) {
+                viewModelScope.launch {
+                    val identity = deviceUserIdentity.value
+                    if (identity != null) {
+                        tripRepo.fetchTripsForUser(identity.deviceId)
+                    }
+                }
+            }
         }
     }
 
@@ -313,6 +430,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _selectedDestinationId.value = trip.destinationId
         }
         navigateTo(Screen.TripDetail(tripId))
+        viewModelScope.launch {
+            tripRepo.syncTripData(tripId)
+        }
     }
 
     fun setExploreDestination(destinationId: String) {
@@ -480,7 +600,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun completeWizardAndGenerateTrip() {
         viewModelScope.launch {
             isGeneratingItinerary.value = true
-            val tripId = "trip_" + UUID.randomUUID().toString().take(8)
+            val tripId = UUID.randomUUID().toString()
             val destName = wizardSelectedDestination.value.trim().ifBlank { "Jaipur" }
             val startingCity = wizardStartingCity.value.trim().ifBlank { "Delhi" }
             val totalBudgetVal = wizardBudget.value.toDoubleOrNull() ?: 25000.0
@@ -517,9 +637,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 tripRepo.createTrip(newTrip)
 
                 // Add group members
-                val currentUserName = currentUser.value?.name ?: "Yash"
-                tripRepo.addMember(tripId, currentUserName, currentUser.value?.email ?: "")
-                tripRepo.addMember(tripId, "Travel Companion", "")
+                val currentUserIdentity = deviceUserIdentity.value
+                if (currentUserIdentity != null) {
+                    tripRepo.addParticipantToTrip(
+                        tripId = tripId,
+                        participantId = currentUserIdentity.deviceId,
+                        name = currentUserIdentity.displayName,
+                        email = "",
+                        isCurrentUser = true
+                    )
+                } else {
+                    val currentUserName = currentUser.value?.name ?: "Yash"
+                    tripRepo.addMember(tripId, currentUserName, currentUser.value?.email ?: "")
+                }
+                // Optional: tripRepo.addMember(tripId, "Travel Companion", "")
 
                 // Step 3: Synthesize dynamic day-by-day itinerary via Gemini AI with real destination coordinates & known places
                 generationProgressMessage.value = "Synthesizing $daysCount-day $destName itinerary via Gemini AI..."
@@ -617,22 +748,110 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Add expense
     fun addExpense(
         title: String,
-        amount: Double,
+        amountInRupees: Double,
         category: String,
-        paidBy: GroupMemberEntity
+        paidBy: GroupMemberEntity,
+        selectedParticipants: List<GroupMemberEntity>,
+        splitType: String = "EQUAL",
+        customAllocations: List<com.example.domain.expense.ExpenseSplitAllocation>? = null
     ) {
         viewModelScope.launch {
-            val members = currentMembers.value
             tripRepo.addExpenseWithSplits(
                 tripId = _selectedTripId.value,
                 title = title,
                 category = category,
-                amount = amount,
+                amountInRupees = amountInRupees,
                 paidBy = paidBy,
-                members = members,
-                splitType = "EQUAL"
+                selectedParticipants = selectedParticipants,
+                splitType = splitType,
+                customAllocations = customAllocations
             )
-            _toastMessage.emit("Added expense: ₹${amount.toInt()}")
+            _toastMessage.emit("Added expense: ₹${amountInRupees.toInt()}")
+        }
+    }
+
+    fun updateExpense(
+        expenseId: String,
+        title: String,
+        amountInRupees: Double,
+        category: String,
+        paidBy: GroupMemberEntity,
+        selectedParticipants: List<GroupMemberEntity>,
+        splitType: String = "EQUAL",
+        customAllocations: List<com.example.domain.expense.ExpenseSplitAllocation>? = null
+    ) {
+        viewModelScope.launch {
+            tripRepo.updateExpenseWithSplits(
+                expenseId = expenseId,
+                tripId = _selectedTripId.value,
+                title = title,
+                category = category,
+                amountInRupees = amountInRupees,
+                paidBy = paidBy,
+                selectedParticipants = selectedParticipants,
+                splitType = splitType,
+                customAllocations = customAllocations
+            )
+            _toastMessage.emit("Updated expense: '$title'")
+        }
+    }
+
+    fun deleteExpense(expenseId: String) {
+        viewModelScope.launch {
+            tripRepo.deleteExpenseWithSplits(expenseId, _selectedTripId.value)
+            _toastMessage.emit("Expense deleted")
+        }
+    }
+
+    fun recordSettlement(
+        payer: GroupMemberEntity,
+        receiverName: String,
+        receiverId: String,
+        amountInRupees: Double
+    ) {
+        viewModelScope.launch {
+            tripRepo.recordSettlement(
+                tripId = _selectedTripId.value,
+                payer = payer,
+                receiverName = receiverName,
+                receiverId = receiverId,
+                amountInRupees = amountInRupees
+            )
+            _toastMessage.emit("Recorded settlement payment of ₹${amountInRupees.toInt()}")
+        }
+    }
+
+    fun addParticipantFromQr(payload: com.example.ui.components.QrParticipantPayload) {
+        viewModelScope.launch {
+            val added = tripRepo.addParticipantToTrip(
+                tripId = _selectedTripId.value,
+                participantId = payload.id,
+                name = payload.name,
+                email = "",
+                isCurrentUser = false
+            )
+            if (added) {
+                _toastMessage.emit("Added ${payload.name} as companion!")
+            } else {
+                _toastMessage.emit("${payload.name} is already in this trip group")
+            }
+        }
+    }
+
+    fun addParticipantFromSaved(participant: SavedParticipantEntity) {
+        viewModelScope.launch {
+            val added = tripRepo.addParticipantToTrip(
+                tripId = _selectedTripId.value,
+                participantId = participant.id,
+                name = participant.name,
+                email = participant.email,
+                isCurrentUser = false
+            )
+            if (added) {
+                _toastMessage.emit("Added ${participant.name} to trip group")
+            } else {
+                _toastMessage.emit("${participant.name} is already in this trip")
+            }
         }
     }
 

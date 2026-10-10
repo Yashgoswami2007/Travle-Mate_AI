@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +46,9 @@ fun ProfileScreen(
     val currentSession by viewModel.currentSession.collectAsState()
     val currentPublicProfile by viewModel.currentPublicProfile.collectAsState()
     val pendingInvitations by viewModel.pendingInvitations.collectAsState()
+    val deviceIdentity by viewModel.deviceUserIdentity.collectAsState()
+
+    var showQrScannerDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -57,6 +61,123 @@ fun ProfileScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Device Profile Card & Companion QR Code
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = TravelNavyDark),
+                    modifier = Modifier.fillMaxWidth().testTag("device_profile_card")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(CircleShape)
+                                        .background(TravelTerracotta),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = deviceIdentity.avatarInitials,
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White
+                                    )
+                                }
+
+                                Column {
+                                    Text(
+                                        text = deviceIdentity.displayName,
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "@${deviceIdentity.username}",
+                                        fontSize = 13.sp,
+                                        color = TravelNavyContainer
+                                    )
+                                    Text(
+                                        text = "Device ID: ${deviceIdentity.deviceId.take(12)}...",
+                                        fontSize = 11.sp,
+                                        color = Color.White.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+
+                            TravelBadge(
+                                text = "ACTIVE DEVICE",
+                                containerColor = TravelForestGreen.copy(alpha = 0.3f),
+                                contentColor = Color(0xFF86EFAC)
+                            )
+                        }
+
+                        // QR Code Generation
+                        val qrPayload = com.example.ui.components.QrCodeUtils.encodeParticipantPayload(
+                            id = deviceIdentity.deviceId,
+                            name = deviceIdentity.displayName,
+                            username = deviceIdentity.username
+                        )
+                        val qrBitmap = remember(qrPayload) {
+                            com.example.ui.components.QrCodeUtils.generateQrCodeBitmap(qrPayload, 360)
+                        }
+
+                        if (qrBitmap != null) {
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 6.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    androidx.compose.foundation.Image(
+                                        bitmap = qrBitmap.asImageBitmap(),
+                                        contentDescription = "My Participant QR Code",
+                                        modifier = Modifier.size(160.dp).testTag("my_qr_code_image")
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = "Scan to add me as travel companion",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TravelNavyDark
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = { showQrScannerDialog = true },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = TravelTerracotta),
+                                modifier = Modifier.weight(1f).height(44.dp).testTag("btn_scan_companion_qr")
+                            ) {
+                                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Scan Companion QR", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
             // Authentication Status Banner (if guest / not logged in)
             if (currentSession == null) {
                 item {
@@ -409,5 +530,16 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(90.dp))
             }
         }
+    }
+
+    if (showQrScannerDialog) {
+        com.example.ui.components.QrScannerDialog(
+            currentUserId = deviceIdentity.deviceId,
+            onParticipantConfirmed = { payload ->
+                viewModel.addParticipantFromQr(payload)
+                showQrScannerDialog = false
+            },
+            onDismiss = { showQrScannerDialog = false }
+        )
     }
 }

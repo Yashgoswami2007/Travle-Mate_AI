@@ -8,13 +8,18 @@ import java.util.UUID
 
 class TripRepository(private val db: AppDatabase) {
 
+    private val syncService = com.example.data.remote.SupabaseSyncService(db)
+
     fun getAllTrips(): Flow<List<TripEntity>> = db.tripDao().getAllTrips()
 
     fun getTripFlow(tripId: String): Flow<TripEntity?> = db.tripDao().getTripFlow(tripId)
 
     suspend fun getTripById(tripId: String): TripEntity? = db.tripDao().getTripById(tripId)
 
-    suspend fun createTrip(trip: TripEntity) = db.tripDao().insertTrip(trip)
+    suspend fun createTrip(trip: TripEntity) {
+        db.tripDao().insertTrip(trip)
+        syncService.pushTrip(trip)
+    }
 
     suspend fun updateTrip(trip: TripEntity) = db.tripDao().updateTrip(trip)
 
@@ -40,7 +45,9 @@ class TripRepository(private val db: AppDatabase) {
         val totalExpenses = expenses.sumOf { it.amount }
         val trip = db.tripDao().getTripById(tripId)
         if (trip != null) {
-            db.tripDao().updateTrip(trip.copy(spentBudget = totalActivityCosts + totalExpenses))
+            val updated = trip.copy(spentBudget = totalActivityCosts + totalExpenses)
+            db.tripDao().updateTrip(updated)
+            syncService.pushTrip(updated)
         }
     }
 
@@ -138,67 +145,209 @@ class TripRepository(private val db: AppDatabase) {
     fun getSplits(tripId: String): Flow<List<ExpenseSplitEntity>> =
         db.expenseDao().getSplitsForTrip(tripId)
 
+    fun getSettlements(tripId: String): Flow<List<SettlementEntity>> =
+        db.settlementDao().getSettlementsForTrip(tripId)
+
+    fun getSavedParticipants(): Flow<List<SavedParticipantEntity>> =
+        db.savedParticipantDao().getAllSavedParticipants()
+
+    suspend fun saveGlobalParticipant(participant: SavedParticipantEntity) {
+        db.savedParticipantDao().insertParticipant(participant)
+    }
+
+    suspend fun addParticipantToTrip(
+        tripId: String,
+        participantId: String,
+        name: String,
+        email: String = "",
+        isCurrentUser: Boolean = false
+    ): Boolean {
+        val existingMembers = db.expenseDao().getMembersForTripSync(tripId)
+        if (existingMembers.any { it.participantId == participantId || (isCurrentUser && it.isCurrentUser) }) {
+            return false
+        }
+
+        val colors = listOf("#1E3A5F", "#E06D53", "#0284C7", "#16A34A", "#9333EA")
+        val color = colors[kotlin.math.abs(name.hashCode()) % colors.size]
+
+        val member = GroupMemberEntity(
+            id = UUID.randomUUID().toString(),
+            tripId = tripId,
+            participantId = participantId,
+            name = name,
+            email = email,
+            avatarColorHex = color,
+            isCurrentUser = isCurrentUser
+        )
+        db.expenseDao().insertMember(member)
+
+        db.savedParticipantDao().insertParticipant(
+            SavedParticipantEntity(
+                id = participantId,
+                name = name,
+                email = email,
+                avatarColorHex = color
+            )
+        )
+        syncService.pushMember(member)
+        return true
+    }
+
     suspend fun addExpenseWithSplits(
         tripId: String,
         title: String,
         category: String,
-        amount: Double,
+        amountInRupees: Double,
         paidBy: GroupMemberEntity,
-        members: List<GroupMemberEntity>,
-        splitType: String
+        selectedParticipants: List<GroupMemberEntity>,
+        splitType: String = "EQUAL",
+        customAllocations: List<com.example.domain.expense.ExpenseSplitAllocation>? = null
     ) {
+        val amountInPaise = com.example.domain.expense.ExpenseEngine.rupeesToPaise(amountInRupees)
         val expenseId = UUID.randomUUID().toString()
+
+        val participantIds = selectedParticipants.map { it.id }
+        val namesMap = selectedParticipants.associate { it.id to it.name }
+
         val expense = ExpenseEntity(
             id = expenseId,
             tripId = tripId,
             title = title,
             category = category,
-            amount = amount,
+            amountInPaise = amountInPaise,
             paidByMemberId = paidBy.id,
             paidByMemberName = paidBy.name,
             splitType = splitType,
+            participantIdsJson = participantIds.joinToString(","),
             date = "Today",
             notes = "Recorded in TripMate AI"
         )
+
         db.expenseDao().insertExpense(expense)
 
-        val splitAmount = if (members.isNotEmpty()) amount / members.size else amount
-        val splits = members.map { mem ->
+        val allocations = if (splitType == "CUSTOM" && !customAllocations.isNullOrEmpty()) {
+            customAllocations
+        } else {
+            com.example.domain.expense.ExpenseEngine.calculateEqualSplits(
+                amountInPaise = amountInPaise,
+                participantIds = participantIds,
+                participantNames = namesMap
+            )
+        }
+
+        val splits = allocations.map { alloc ->
             ExpenseSplitEntity(
                 id = UUID.randomUUID().toString(),
                 expenseId = expenseId,
                 tripId = tripId,
-                memberId = mem.id,
-                memberName = mem.name,
-                shareAmount = splitAmount,
-                isSettled = mem.id == paidBy.id // Paid person is settled for their own share
+                memberId = alloc.memberId,
+                memberName = alloc.memberName,
+                shareAmountInPaise = alloc.shareAmountInPaise,
+                isSettled = alloc.memberId == paidBy.id
             )
         }
-        db.expenseDao().insertSplits(splits)
 
-        // Update trip spent budget
-        val trip = db.tripDao().getTripById(tripId)
-        if (trip != null) {
-            db.tripDao().updateTrip(trip.copy(spentBudget = trip.spentBudget + amount))
+        db.expenseDao().insertSplits(splits)
+        updateTripSpentBudget(tripId)
+        syncService.pushExpenseAndSplits(expense, splits)
+    }
+
+    suspend fun updateExpenseWithSplits(
+        expenseId: String,
+        tripId: String,
+        title: String,
+        category: String,
+        amountInRupees: Double,
+        paidBy: GroupMemberEntity,
+        selectedParticipants: List<GroupMemberEntity>,
+        splitType: String = "EQUAL",
+        customAllocations: List<com.example.domain.expense.ExpenseSplitAllocation>? = null
+    ) {
+        val amountInPaise = com.example.domain.expense.ExpenseEngine.rupeesToPaise(amountInRupees)
+        val participantIds = selectedParticipants.map { it.id }
+        val namesMap = selectedParticipants.associate { it.id to it.name }
+
+        val updatedExpense = ExpenseEntity(
+            id = expenseId,
+            tripId = tripId,
+            title = title,
+            category = category,
+            amountInPaise = amountInPaise,
+            paidByMemberId = paidBy.id,
+            paidByMemberName = paidBy.name,
+            splitType = splitType,
+            participantIdsJson = participantIds.joinToString(","),
+            date = "Today",
+            notes = "Updated in TripMate AI",
+            updatedAt = System.currentTimeMillis()
+        )
+
+        db.expenseDao().insertExpense(updatedExpense)
+        db.expenseDao().deleteSplitsForExpense(expenseId)
+
+        val allocations = if (splitType == "CUSTOM" && !customAllocations.isNullOrEmpty()) {
+            customAllocations
+        } else {
+            com.example.domain.expense.ExpenseEngine.calculateEqualSplits(
+                amountInPaise = amountInPaise,
+                participantIds = participantIds,
+                participantNames = namesMap
+            )
         }
+
+        val newSplits = allocations.map { alloc ->
+            ExpenseSplitEntity(
+                id = UUID.randomUUID().toString(),
+                expenseId = expenseId,
+                tripId = tripId,
+                memberId = alloc.memberId,
+                memberName = alloc.memberName,
+                shareAmountInPaise = alloc.shareAmountInPaise,
+                isSettled = alloc.memberId == paidBy.id
+            )
+        }
+
+        db.expenseDao().insertSplits(newSplits)
+        updateTripSpentBudget(tripId)
+        syncService.pushExpenseAndSplits(updatedExpense, newSplits)
+    }
+
+    suspend fun deleteExpenseWithSplits(expenseId: String, tripId: String) {
+        db.expenseDao().deleteSplitsForExpense(expenseId)
+        db.expenseDao().deleteExpenseById(expenseId)
+        updateTripSpentBudget(tripId)
+        syncService.deleteExpense(expenseId)
+    }
+
+    suspend fun recordSettlement(
+        tripId: String,
+        payer: GroupMemberEntity,
+        receiverName: String,
+        receiverId: String,
+        amountInRupees: Double
+    ) {
+        val amountInPaise = com.example.domain.expense.ExpenseEngine.rupeesToPaise(amountInRupees)
+        val settlement = SettlementEntity(
+            id = UUID.randomUUID().toString(),
+            tripId = tripId,
+            payerMemberId = payer.id,
+            payerName = payer.name,
+            receiverMemberId = receiverId,
+            receiverName = receiverName,
+            amountInPaise = amountInPaise,
+            date = "Today"
+        )
+        db.settlementDao().insertSettlement(settlement)
     }
 
     suspend fun settleSplit(splitId: String) {
         db.expenseDao().updateSplitSettled(splitId, true)
+        syncService.updateSplitSettled(splitId, true)
     }
 
     suspend fun addMember(tripId: String, name: String, email: String) {
-        val colors = listOf("#1E3A5F", "#E06D53", "#0284C7", "#16A34A", "#9333EA")
-        val color = colors[name.length % colors.size]
-        val member = GroupMemberEntity(
-            id = UUID.randomUUID().toString(),
-            tripId = tripId,
-            name = name,
-            email = email,
-            avatarColorHex = color,
-            isCurrentUser = false
-        )
-        db.expenseDao().insertMember(member)
+        val participantId = "p_" + UUID.randomUUID().toString().take(8)
+        addParticipantToTrip(tripId, participantId, name, email, false)
     }
 
     // Chat
@@ -214,6 +363,14 @@ class TripRepository(private val db: AppDatabase) {
 
     suspend fun addBooking(booking: BookingEntity) =
         db.travelSearchDao().insertBooking(booking)
+
+    suspend fun fetchTripsForUser(deviceId: String) {
+        syncService.fetchTripsForUser(deviceId)
+    }
+
+    suspend fun syncTripData(tripId: String) {
+        syncService.fetchExpensesAndSplits(tripId)
+    }
 }
 
 class DestinationRepository(

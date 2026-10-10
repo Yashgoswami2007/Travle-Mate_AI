@@ -143,6 +143,39 @@ class GeminiTravelService(
         return@withContext null
     }
 
+    private fun extractJsonArray(jsonResponse: String): JSONArray {
+        val cleaned = jsonResponse.trim()
+            .removePrefix("```json")
+            .removePrefix("```")
+            .removeSuffix("```")
+            .trim()
+
+        try {
+            return JSONArray(cleaned)
+        } catch (e: Exception) {
+            try {
+                val obj = JSONObject(cleaned)
+                val keys = obj.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val value = obj.optJSONArray(key)
+                    if (value != null) {
+                        return value
+                    }
+                }
+            } catch (e2: Exception) {}
+
+            val start = cleaned.indexOf('[')
+            val end = cleaned.lastIndexOf(']')
+            if (start != -1 && end != -1 && start < end) {
+                try {
+                    return JSONArray(cleaned.substring(start, end + 1))
+                } catch (e3: Exception) {}
+            }
+            throw e
+        }
+    }
+
     /**
      * Dynamically synthesizes a full day-by-day itinerary for any destination using Gemini API.
      * Incorporates real coordinates, known landmarks, sequential non-overlapping schedule timing,
@@ -229,13 +262,7 @@ class GeminiTravelService(
 
         if (!jsonResponse.isNullOrBlank()) {
             try {
-                val cleanedJson = jsonResponse.trim()
-                    .removePrefix("```json")
-                    .removePrefix("```")
-                    .removeSuffix("```")
-                    .trim()
-
-                val array = JSONArray(cleanedJson)
+                val array = extractJsonArray(jsonResponse)
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
                     val dayNum = obj.optInt("dayNumber", 1)
@@ -414,7 +441,7 @@ class GeminiTravelService(
 
         if (!jsonResponse.isNullOrBlank()) {
             try {
-                val array = JSONArray(jsonResponse.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim())
+                val array = extractJsonArray(jsonResponse)
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
                     val mode = obj.optString("mode", "Transport")
@@ -487,7 +514,7 @@ class GeminiTravelService(
 
         if (!jsonResponse.isNullOrBlank()) {
             try {
-                val array = JSONArray(jsonResponse.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim())
+                val array = extractJsonArray(jsonResponse)
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
                     val name = obj.optString("name", "Hotel in $destinationCity")
@@ -563,7 +590,7 @@ class GeminiTravelService(
 
         if (!jsonResponse.isNullOrBlank()) {
             try {
-                val array = JSONArray(jsonResponse.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim())
+                val array = extractJsonArray(jsonResponse)
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
                     val name = obj.optString("name", "Attraction")
@@ -642,7 +669,7 @@ class GeminiTravelService(
 
         if (!jsonResponse.isNullOrBlank()) {
             try {
-                val array = JSONArray(jsonResponse.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim())
+                val array = extractJsonArray(jsonResponse)
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
                     val name = obj.optString("name", "Restaurant")
