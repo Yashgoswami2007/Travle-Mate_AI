@@ -1,0 +1,6 @@
+{
+  "name": "TripMate AI",
+  "description": "AI-powered travel planning, live discovery, itinerary engine, and trip expense companion",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
