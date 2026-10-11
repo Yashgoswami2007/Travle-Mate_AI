@@ -236,6 +236,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val searchResults = MutableStateFlow<List<DestinationEntity>>(emptyList())
     val liveLocationResults = MutableStateFlow<List<com.example.data.remote.GeocodedLocation>>(emptyList())
     val isSearchingLocations = MutableStateFlow(false)
+    val isResearchingDestination = MutableStateFlow(false)
+    val researchingDestinationName = MutableStateFlow("")
 
     // Wizard State
     val wizardStartDate = MutableStateFlow("")
@@ -467,34 +469,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 liveLocationResults.value = emptyList()
                 isSearchingLocations.value = false
             } else {
-                // 1. Search local cached destinations
-                searchResults.value = destRepo.searchDestinations(query)
+                try {
+                    // 1. Search local cached destinations
+                    searchResults.value = destRepo.searchDestinations(query)
+                } catch (e: Exception) {
+                    searchResults.value = emptyList()
+                }
 
-                // 2. Query real-time geocoder
-                isSearchingLocations.value = true
-                val live = destRepo.searchLiveLocations(query)
-                liveLocationResults.value = live
-                isSearchingLocations.value = false
+                try {
+                    // 2. Query real-time geocoder
+                    isSearchingLocations.value = true
+                    val live = destRepo.searchLiveLocations(query)
+                    liveLocationResults.value = live
+                } catch (e: Exception) {
+                    liveLocationResults.value = emptyList()
+                } finally {
+                    isSearchingLocations.value = false
+                }
             }
         }
     }
 
     fun selectLiveLocation(location: com.example.data.remote.GeocodedLocation) {
         viewModelScope.launch {
+            researchingDestinationName.value = location.name
+            isResearchingDestination.value = true
             isSearchingLocations.value = true
-            _toastMessage.emit("Checking Public Cache for ${location.name}...")
-            val result = destRepo.getOrResearchDestination(location.name, userLocationName.value)
-            if (result.isFromCache) {
-                _toastMessage.emit("Reused from Public Destination Cache. No duplicate AI call made!")
-            } else {
-                _toastMessage.emit("Researched ${result.destination.name} via Gemini AI & saved to Public DB!")
+            try {
+                _toastMessage.emit("Checking Public Cache for ${location.name}...")
+                val result = destRepo.getOrResearchDestination(location.name, userLocationName.value)
+                if (result.isFromCache) {
+                    _toastMessage.emit("Reused from Public Destination Cache. No duplicate AI call made!")
+                } else {
+                    _toastMessage.emit("Researched ${result.destination.name} via Gemini AI & saved to Public DB!")
+                }
+                destRepo.recordSearch(location.name, location.name)
+                searchQuery.value = ""
+                liveLocationResults.value = emptyList()
+                _selectedDestinationId.value = result.destination.id
+                navigateTo(Screen.DestinationDetail(result.destination.id))
+            } catch (e: Exception) {
+                _toastMessage.emit("Error loading destination: ${e.message}")
+            } finally {
+                isSearchingLocations.value = false
+                isResearchingDestination.value = false
             }
-            destRepo.recordSearch(location.name, location.name)
-            searchQuery.value = ""
-            liveLocationResults.value = emptyList()
-            isSearchingLocations.value = false
-            _selectedDestinationId.value = result.destination.id
-            navigateTo(Screen.DestinationDetail(result.destination.id))
         }
     }
 
@@ -502,6 +521,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (query.isBlank()) return@launch
             destRepo.recordSearch(query, query)
+            researchingDestinationName.value = query
+            isResearchingDestination.value = true
             isSearchingLocations.value = true
             try {
                 _toastMessage.emit("Checking Public Destination Database for '$query'...")
@@ -518,6 +539,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _toastMessage.emit("Search error: ${e.message}")
             } finally {
                 isSearchingLocations.value = false
+                isResearchingDestination.value = false
             }
         }
     }

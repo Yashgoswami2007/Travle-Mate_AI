@@ -134,15 +134,16 @@ class PlaceImageService(
             resolvedUrl = getDynamicContextualImageUrl(placeName, cityName, category)
         }
 
-        // Sanitize URL for Coil (Wikipedia sometimes returns protocol-relative URLs)
-        resolvedUrl = resolvedUrl?.let { if (it.startsWith("//")) "https:$it" else it }
+        val finalUrl = (resolvedUrl?.ifBlank { null } ?: getDynamicContextualImageUrl(placeName, cityName, category)).let {
+            if (it.startsWith("//")) "https:$it" else it
+        }
 
         // 5. Cache the resolved URL to memory, local DB, and Supabase
-        memoryImageCache[queryKey] = resolvedUrl!!
-        saveToLocalCache(queryKey, resolvedUrl, category, placeName)
-        saveToSupabaseImageCache(queryKey, resolvedUrl, category, placeName)
+        memoryImageCache[queryKey] = finalUrl
+        saveToLocalCache(queryKey, finalUrl, category, placeName)
+        saveToSupabaseImageCache(queryKey, finalUrl, category, placeName)
 
-        return@withContext resolvedUrl
+        return@withContext finalUrl
     }
 
     /**

@@ -476,26 +476,34 @@ class DestinationRepository(
         dest: DestinationEntity,
         fromCity: String
     ) {
-        // Fetch Live Transport (Flight, Train, Bus, Cab)
-        val liveTransport = liveTravelSearchService.searchLiveTransport(
-            fromCity = fromCity,
-            toCity = dest.name,
-            destinationId = dest.id,
-            originLat = 28.6139,
-            originLon = 77.2090,
-            destLat = dest.latitude,
-            destLon = dest.longitude
-        )
-        db.travelSearchDao().insertTransportOptions(liveTransport)
+        try {
+            // Fetch Live Transport (Flight, Train, Bus, Cab)
+            val liveTransport = liveTravelSearchService.searchLiveTransport(
+                fromCity = fromCity,
+                toCity = dest.name,
+                destinationId = dest.id,
+                originLat = 28.6139,
+                originLon = 77.2090,
+                destLat = dest.latitude,
+                destLon = dest.longitude
+            )
+            if (liveTransport.isNotEmpty()) {
+                db.travelSearchDao().insertTransportOptions(liveTransport)
+            }
 
-        // Fetch Live Hotels
-        val liveHotels = liveTravelSearchService.searchLiveHotels(
-            destinationName = dest.name,
-            destinationId = dest.id,
-            lat = dest.latitude,
-            lon = dest.longitude
-        )
-        db.travelSearchDao().insertHotelOptions(liveHotels)
+            // Fetch Live Hotels
+            val liveHotels = liveTravelSearchService.searchLiveHotels(
+                destinationName = dest.name,
+                destinationId = dest.id,
+                lat = dest.latitude,
+                lon = dest.longitude
+            )
+            if (liveHotels.isNotEmpty()) {
+                db.travelSearchDao().insertHotelOptions(liveHotels)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("DestinationRepository", "Failed to fetch live transport/hotels: ${e.message}")
+        }
     }
 
     suspend fun toggleSaved(id: String, isSaved: Boolean) =

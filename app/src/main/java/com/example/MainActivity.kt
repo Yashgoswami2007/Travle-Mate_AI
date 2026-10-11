@@ -35,6 +35,7 @@ import com.example.ui.screens.onboarding.OnboardingScreen
 import com.example.ui.screens.trip.TripsListScreen
 import com.example.ui.screens.chat.ChatInboxScreen
 import com.example.ui.screens.chat.ChatConversationScreen
+import com.example.ui.components.DestinationGeneratingDialog
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.MainViewModel
 import com.example.ui.viewmodel.Screen
@@ -261,6 +262,13 @@ class MainActivity : ComponentActivity() {
                             is Screen.Auth -> AuthScreen(viewModel = mainViewModel)
                             is Screen.Onboarding -> OnboardingScreen(viewModel = mainViewModel)
                             else -> HomeScreen(viewModel = mainViewModel)
+                        }
+
+                        // Modal pop-up dialog when researching / generating destination from search
+                        val isResearchingDestination by mainViewModel.isResearchingDestination.collectAsState()
+                        val researchingName by mainViewModel.researchingDestinationName.collectAsState()
+                        if (isResearchingDestination) {
+                            DestinationGeneratingDialog(destinationName = researchingName)
                         }
                     }
                 }

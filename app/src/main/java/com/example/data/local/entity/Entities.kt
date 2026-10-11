@@ -19,7 +19,9 @@ data class UserEntity(
     val budgetTier: String = "Medium", // Budget, Moderate, Luxury
     val preferredAccommodation: String = "Boutique Hotel",
     val preferredTransport: String = "Train",
-    val avatarInitials: String = "TM"
+    val avatarInitials: String = "TM",
+    val username: String = "",
+    val dateOfBirth: String = ""
 )
 
 @Entity(tableName = "trips")

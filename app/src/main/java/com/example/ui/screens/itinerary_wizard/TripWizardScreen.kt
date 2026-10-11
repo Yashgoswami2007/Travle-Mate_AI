@@ -548,7 +548,7 @@ fun TripWizardScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "Generating ",
+                        text = "Generating",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = TravelNavyPrimary

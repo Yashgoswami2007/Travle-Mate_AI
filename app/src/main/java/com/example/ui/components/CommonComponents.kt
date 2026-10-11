@@ -21,6 +21,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -310,6 +311,101 @@ fun TravelAppTextField(
             fontWeight = FontWeight.Normal
         ),
         colors = travelTextFieldColors(containerColor = containerColor)
+    )
+}
+
+/**
+ * Modal dialog displayed when researching / synthesizing a destination via Gemini AI.
+ * Shows an animated loading state and destination name as requested.
+ */
+@Composable
+fun DestinationGeneratingDialog(
+    destinationName: String
+) {
+    AlertDialog(
+        onDismissRequest = { /* Cannot dismiss while generating */ },
+        confirmButton = {},
+        dismissButton = null,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = TravelSurfaceCard,
+        modifier = Modifier.testTag("destination_generating_dialog"),
+        title = null,
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp, horizontal = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .background(TravelNavyContainer, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = TravelNavyPrimary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Generating",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TravelNavyPrimary
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = if (destinationName.isNotBlank()) {
+                        "TripMate AI is researching destination guides, authentic landmarks & travel insights for $destinationName..."
+                    } else {
+                        "TripMate AI is researching destination guides, landmarks & travel insights..."
+                    },
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 18.sp
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = TravelTerracotta,
+                    trackColor = TravelNavyContainer
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Public,
+                        contentDescription = null,
+                        tint = TravelAmberAccent,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Powered by Gemini AI & Real Travel Knowledge",
+                        fontSize = 11.sp,
+                        color = TextMuted,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
     )
 }
 

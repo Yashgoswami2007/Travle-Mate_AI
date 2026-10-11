@@ -240,7 +240,12 @@ class SupabaseDestinationCacheService(
 
             // 5. Persist Destination to Supabase FIRST (to get real UUID)
             // Or if it already existed, upsertDestinationToSupabase will return it with the existing UUID
-            val persistedDest = upsertDestinationToSupabase(targetDest)
+            val persistedDest = try {
+                upsertDestinationToSupabase(targetDest)
+            } catch (e: Exception) {
+                Log.w(tag, "Failed to persist destination to Supabase: ${e.message}. Falling back to local UUID.")
+                targetDest.copy(id = if (targetDest.id.isNotBlank()) targetDest.id else UUID.randomUUID().toString())
+            }
             val realDestId = persistedDest.id
 
             // 6. Fetch Key Attractions using the real database UUID
@@ -283,7 +288,15 @@ class SupabaseDestinationCacheService(
             }
 
             // 8. Persist Attractions and Images to Supabase SYNCHRONOUSLY
-            val (persistedAttractions, persistedImages) = upsertAttractionsAndImagesToSupabase(realDestId, attractions, images)
+            val (persistedAttractions, persistedImages) = try {
+                upsertAttractionsAndImagesToSupabase(realDestId, attractions, images)
+            } catch (e: Exception) {
+                Log.w(tag, "Failed to persist attractions/images to Supabase: ${e.message}. Falling back to local UUIDs.")
+                Pair(
+                    attractions.map { it.copy(id = if (it.id.isNotBlank()) it.id else UUID.randomUUID().toString(), destinationId = realDestId) },
+                    images.map { it.copy(id = if (it.id.isNotBlank()) it.id else UUID.randomUUID().toString(), destinationId = realDestId) }
+                )
+            }
 
             // 9. Store into Local Public Database (Room) with REAL Database IDs
             db.destinationDao().insertDestinations(listOf(persistedDest))
@@ -298,7 +311,7 @@ class SupabaseDestinationCacheService(
             )
 
             // Fulfill the deferred job so all waiting concurrent requests immediately receive the result
-            deferredJob!!.complete(finalResult)
+            deferredJob?.complete(finalResult)
             Log.d(tag, "Destination '$normalized' successfully researched, stored to Public DB, and returned.")
             return@withContext finalResult
         } catch (e: Exception) {
@@ -519,17 +532,34 @@ class SupabaseDestinationCacheService(
             val returnedAttrArray = JSONArray(attrResponseBody)
             for (i in 0 until returnedAttrArray.length()) {
                 val returnedObj = returnedAttrArray.getJSONObject(i)
-                val matchingOriginal = attractions.find { it.normalizedName == returnedObj.optString("normalized_name") }
+                val returnedId = returnedObj.optString("id", UUID.randomUUID().toString())
+                val returnedNormalizedName = returnedObj.optString("normalized_name")
+                val matchingOriginal = attractions.find { it.normalizedName == returnedNormalizedName }
                 if (matchingOriginal != null) {
                     persistedAttractions.add(matchingOriginal.copy(
-                        id = returnedObj.getString("id"),
+                        id = returnedId,
+                        destinationId = realDestId
+                    ))
+                } else if (i < attractions.size) {
+                    persistedAttractions.add(attractions[i].copy(
+                        id = returnedId,
                         destinationId = realDestId
                     ))
                 } else {
-                    persistedAttractions.add(attractions[i].copy(
-                        id = returnedObj.getString("id"),
-                        destinationId = realDestId
-                    ))
+                    persistedAttractions.add(
+                        PlaceEntity(
+                            id = returnedId,
+                            destinationId = realDestId,
+                            name = returnedObj.optString("name", "Attraction"),
+                            category = returnedObj.optString("category", "Landmark"),
+                            description = returnedObj.optString("description", ""),
+                            locationName = returnedObj.optString("location_address", ""),
+                            latitude = returnedObj.optDouble("latitude", 0.0),
+                            longitude = returnedObj.optDouble("longitude", 0.0),
+                            imageUrl = returnedObj.optString("image_url", ""),
+                            isSaved = false
+                        )
+                    )
                 }
             }
         }
@@ -573,12 +603,27 @@ class SupabaseDestinationCacheService(
             val returnedImgArray = JSONArray(imgResponseBody)
             for (i in 0 until returnedImgArray.length()) {
                 val returnedObj = returnedImgArray.getJSONObject(i)
+                val returnedId = returnedObj.optString("id", UUID.randomUUID().toString())
                 val attractionId = if (returnedObj.isNull("attraction_id")) null else returnedObj.optString("attraction_id")
-                persistedImages.add(images[i].copy(
-                    id = returnedObj.getString("id"),
-                    destinationId = realDestId,
-                    attractionId = if (attractionId.isNullOrEmpty() || attractionId == "null") null else attractionId
-                ))
+                if (i < images.size) {
+                    persistedImages.add(images[i].copy(
+                        id = returnedId,
+                        destinationId = realDestId,
+                        attractionId = if (attractionId.isNullOrEmpty() || attractionId == "null") null else attractionId
+                    ))
+                } else {
+                    persistedImages.add(
+                        DestinationImageEntity(
+                            id = returnedId,
+                            destinationId = realDestId,
+                            attractionId = if (attractionId.isNullOrEmpty() || attractionId == "null") null else attractionId,
+                            imageUrl = returnedObj.optString("image_url", ""),
+                            caption = returnedObj.optString("caption", ""),
+                            creditSource = returnedObj.optString("credit_source", "Wikimedia Commons"),
+                            isCover = returnedObj.optBoolean("is_cover", false)
+                        )
+                    )
+                }
             }
         }
 

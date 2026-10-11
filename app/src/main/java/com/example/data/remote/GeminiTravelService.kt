@@ -67,7 +67,7 @@ class GeminiTravelService(
             return@withContext null
         }
 
-        val candidateModels = listOf("gemini-2.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-pro")
+        val candidateModels = listOf("gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro")
 
         for (model in candidateModels) {
             val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
@@ -144,11 +144,19 @@ class GeminiTravelService(
     }
 
     private fun extractJsonArray(jsonResponse: String): JSONArray {
-        val cleaned = jsonResponse.trim()
-            .removePrefix("```json")
-            .removePrefix("```")
-            .removeSuffix("```")
-            .trim()
+        val trimmed = jsonResponse.trim()
+        val cleaned = if (trimmed.contains("```")) {
+            val start = trimmed.indexOf("```")
+            val nextLine = trimmed.indexOf("\n", start)
+            val end = trimmed.lastIndexOf("```")
+            if (nextLine != -1 && end > nextLine) {
+                trimmed.substring(nextLine + 1, end).trim()
+            } else {
+                trimmed.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+            }
+        } else {
+            trimmed
+        }
 
         try {
             return JSONArray(cleaned)
@@ -228,170 +236,148 @@ class GeminiTravelService(
 
             $knownLandmarksSnippet
 
-            For each day from Day 1 to Day $days, create 3 to 4 realistic, chronological activities:
-            - Day 1 should start with transit/arrival or check-in, followed by exploration.
-            - Intermediate days should blend cultural landmarks, local cuisine, markets, scenic/sunset spots, or relaxation.
-            - Final day should include morning exploration and return transit to $startingCity.
-
-            CRITICAL GEOGRAPHIC & REAL-WORLD RULES:
+            CRITICAL REAL-WORLD RULES:
+            - Create 3 to 4 distinct, realistic, chronological activities for each day from Day 1 to Day $days.
+            - Day 1 should start with morning/midday arrival or check-in, followed by iconic exploration in $destName.
+            - Intermediate days should feature real cultural landmarks, scenic points, authentic local eateries, and heritage bazaars.
+            - Final day should include morning exploration and departure transit back to $startingCity.
+            - Do NOT use generic placeholders like "Arrival & City Center Highlights" or "Authentic Local Lunch". Use ACTUAL specific place, landmark, temple, viewpoint, or eatery names in $destName (e.g., Rumtek Monastery, Tsomgo Lake, MG Marg, Nathula Pass, Baker's Cafe).
             - "latitude": realistic coordinate close to $baseLat (within ±0.06 degrees)
             - "longitude": realistic coordinate close to $baseLon (within ±0.06 degrees)
             - "openingHours": realistic venue operating hours (e.g. "09:00 - 18:00", "06:00 - 21:00", or "Open 24 hours")
             - "durationMinutes": realistic duration (e.g. 60, 90, 120, 180)
             - "estimatedCost": realistic ticket/meal/transport cost in INR (number)
 
-            Return ONLY a valid JSON array of objects representing the itinerary items.
-            Keys for each object:
-            - "dayNumber": integer (1 to $days)
-            - "title": concise activity name (e.g. "Morning Transit from $startingCity to $destName", "Explore $destName Fortress")
-            - "locationName": neighborhood or address in $destName
-            - "latitude": number (close to $baseLat)
-            - "longitude": number (close to $baseLon)
-            - "openingHours": string (e.g. "09:00 - 18:00")
-            - "startTime": HH:MM string (24-hour format e.g. "09:30")
-            - "endTime": HH:MM string (24-hour format e.g. "11:30")
-            - "durationMinutes": integer (e.g. 120)
-            - "category": string ("Transport", "Attraction", "Food", "Café", "Shopping", "Hotel", "Photography", "Nature")
-            - "estimatedCost": number in INR (e.g. 350.0)
-            - "travelTimeFromPrevious": string (e.g. "20 mins auto")
-            - "notes": 1-2 sentence tip or advice for this activity including opening hours or entry fee
+            Return ONLY valid JSON. Return an array of activity objects with these keys:
+            [
+              {
+                "dayNumber": 1,
+                "title": "Specific Real Landmark or Activity Name",
+                "locationName": "Specific Area or Neighborhood, $destName",
+                "latitude": $baseLat,
+                "longitude": $baseLon,
+                "openingHours": "09:00 - 18:00",
+                "startTime": "09:30",
+                "endTime": "12:00",
+                "durationMinutes": 150,
+                "category": "Attraction",
+                "estimatedCost": 250.0,
+                "travelTimeFromPrevious": "15 mins",
+                "notes": "Practical tip or entry details"
+              }
+            ]
         """.trimIndent()
 
         val jsonResponse = generateContent(prompt, asJson = true)
         val items = mutableListOf<com.example.data.local.entity.ItineraryItemEntity>()
 
         if (!jsonResponse.isNullOrBlank()) {
-            try {
-                val array = extractJsonArray(jsonResponse)
-                for (i in 0 until array.length()) {
-                    val obj = array.getJSONObject(i)
-                    val dayNum = obj.optInt("dayNumber", 1)
-                    val title = obj.optString("title", "Activity")
-                    val rawLat = obj.optDouble("latitude", 0.0)
-                    val rawLon = obj.optDouble("longitude", 0.0)
-                    val openingHours = obj.optString("openingHours", "09:00 - 18:00")
-
-                    // Resolve coordinates: anchor to known place or realistic offset around baseLat, baseLon
-                    var resolvedLat = rawLat
-                    var resolvedLon = rawLon
-
-                    if (resolvedLat == 0.0 || resolvedLon == 0.0 || kotlin.math.abs(resolvedLat - baseLat) > 2.0) {
-                        val matched = knownPlaces.find {
-                            title.contains(it.name, ignoreCase = true) || it.name.contains(title, ignoreCase = true)
-                        }
-                        if (matched != null && matched.latitude != 0.0) {
-                            resolvedLat = matched.latitude
-                            resolvedLon = matched.longitude
-                        } else {
-                            val angle = (i * 1.37) % (2.0 * Math.PI)
-                            val radiusKm = 0.8 + ((i * 1.3) % 4.5)
-                            resolvedLat = baseLat + (radiusKm * cos(angle)) / 111.0
-                            val cosLat = cos(Math.toRadians(baseLat)).coerceAtLeast(0.1)
-                            resolvedLon = baseLon + (radiusKm * sin(angle)) / (111.0 * cosLat)
-                        }
-                    }
-
-                    val isVerified = knownPlaces.any { it.name.equals(title, ignoreCase = true) }
-                    val sourceLabel = if (isVerified) "Verified Live (Official)" else "AI Researched (Verified Coordinates)"
-
-                    val baseNotes = obj.optString("notes", "Personalized by Gemini AI")
-                    val notesWithHours = if (openingHours.isNotBlank() && !baseNotes.contains("Open", ignoreCase = true)) {
-                        "$baseNotes • Hours: $openingHours"
-                    } else {
-                        baseNotes
-                    }
-
-                    items.add(
-                        com.example.data.local.entity.ItineraryItemEntity(
-                            id = UUID.randomUUID().toString(),
-                            tripId = trip.id,
-                            dayNumber = dayNum,
-                            title = title,
-                            locationName = obj.optString("locationName", "$title, $destName"),
-                            latitude = resolvedLat,
-                            longitude = resolvedLon,
-                            startTime = obj.optString("startTime", "10:00"),
-                            endTime = obj.optString("endTime", "11:30"),
-                            durationMinutes = obj.optInt("durationMinutes", 90),
-                            category = obj.optString("category", "Attraction"),
-                            estimatedCost = obj.optDouble("estimatedCost", 200.0),
-                            travelTimeFromPrevious = obj.optString("travelTimeFromPrevious", "15 mins"),
-                            notes = notesWithHours,
-                            source = sourceLabel,
-                            isCompleted = false,
-                            orderIndex = items.filter { it.dayNumber == dayNum }.size
-                        )
-                    )
-                }
-            } catch (e: Exception) {
-                Log.w("GeminiTravelService", "Failed to parse generated itinerary JSON: ${e.message}")
-            }
+            val parsedList = parseItineraryResponse(
+                jsonResponse = jsonResponse,
+                tripId = trip.id,
+                destName = destName,
+                baseLat = baseLat,
+                baseLon = baseLon,
+                knownPlaces = knownPlaces
+            )
+            items.addAll(parsedList)
         }
 
-        // Resilient fallback anchored to real destination base coordinates if AI call fails or is empty
+        // Resilient fallback: anchor every day to real verified attractions from knownPlaces
         if (items.isEmpty()) {
-            Log.w("GeminiTravelService", "Generating local fallback itinerary for $destName ($days days) around ($baseLat, $baseLon)")
+            Log.w("GeminiTravelService", "Generating attraction-anchored fallback itinerary for $destName ($days days) around ($baseLat, $baseLon)")
+            val availableAttractions = knownPlaces.toMutableList()
+            var placeIndex = 0
+
             for (day in 1..days) {
                 val dayOffset = (day - 1) * 0.005
+
+                // Morning Activity (Real Landmark 1)
+                val morningPlace = if (availableAttractions.isNotEmpty()) {
+                    availableAttractions[placeIndex % availableAttractions.size].also { placeIndex++ }
+                } else null
+
+                val morningTitle = morningPlace?.name ?: (if (day == 1) "Arrival & Explore Historic $destName" else "Visit Top Landmarks in $destName (Day $day)")
+                val morningLat = if (morningPlace != null && morningPlace.latitude != 0.0) morningPlace.latitude else (baseLat + dayOffset)
+                val morningLon = if (morningPlace != null && morningPlace.longitude != 0.0) morningPlace.longitude else (baseLon + dayOffset)
+                val morningLoc = morningPlace?.locationName ?: "Central $destName"
+                val morningHours = morningPlace?.openingHours ?: "09:00 - 18:00"
+                val morningNotes = morningPlace?.description ?: "Essential sightseeing and photography in $destName."
+
                 items.add(
                     com.example.data.local.entity.ItineraryItemEntity(
                         id = UUID.randomUUID().toString(),
                         tripId = trip.id,
                         dayNumber = day,
-                        title = if (day == 1) "Arrival & City Center Highlights" else "Explore Cultural Attractions (Day $day)",
-                        locationName = "Central $destName",
-                        latitude = baseLat + dayOffset,
-                        longitude = baseLon + dayOffset,
+                        title = morningTitle,
+                        locationName = morningLoc,
+                        latitude = morningLat,
+                        longitude = morningLon,
                         startTime = "09:30",
                         endTime = "12:30",
                         durationMinutes = 180,
-                        category = "Attraction",
-                        estimatedCost = 250.0,
-                        travelTimeFromPrevious = "15 mins",
-                        notes = "Essential sightseeing and photography spots in $destName. Open 09:00 - 18:00.",
-                        source = "TripMate Planner (Verified)",
+                        category = morningPlace?.category ?: "Attraction",
+                        estimatedCost = morningPlace?.estimatedCost ?: 250.0,
+                        travelTimeFromPrevious = if (day == 1) "Morning Arrival" else "15 mins cab",
+                        notes = "$morningNotes • Hours: $morningHours",
+                        source = if (morningPlace != null) "Verified Live (Official)" else "TripMate AI Planner",
                         isCompleted = false,
                         orderIndex = 0
                     )
                 )
+
+                // Midday Dining
                 items.add(
                     com.example.data.local.entity.ItineraryItemEntity(
                         id = UUID.randomUUID().toString(),
                         tripId = trip.id,
                         dayNumber = day,
-                        title = "Authentic Local Lunch & Dining",
+                        title = "Local Cuisine & Dining Experience (Day $day)",
                         locationName = "Dining Quarter, $destName",
-                        latitude = baseLat + dayOffset + 0.003,
-                        longitude = baseLon + dayOffset + 0.002,
+                        latitude = morningLat + 0.003,
+                        longitude = morningLon + 0.002,
                         startTime = "13:00",
                         endTime = "14:30",
                         durationMinutes = 90,
                         category = "Food",
                         estimatedCost = 450.0,
-                        travelTimeFromPrevious = "10 mins",
-                        notes = "Taste regional flavors and popular specialties.",
+                        travelTimeFromPrevious = "10 mins walk",
+                        notes = "Taste regional flavors and popular specialties in $destName.",
                         source = "TripMate Planner (Verified)",
                         isCompleted = false,
                         orderIndex = 1
                     )
                 )
+
+                // Afternoon/Evening Activity (Real Landmark 2)
+                val afternoonPlace = if (availableAttractions.isNotEmpty()) {
+                    availableAttractions[placeIndex % availableAttractions.size].also { placeIndex++ }
+                } else null
+
+                val afternoonTitle = afternoonPlace?.name ?: "Scenic Views & Cultural Bazaars in $destName"
+                val afternoonLat = if (afternoonPlace != null && afternoonPlace.latitude != 0.0) afternoonPlace.latitude else (baseLat + dayOffset + 0.006)
+                val afternoonLon = if (afternoonPlace != null && afternoonPlace.longitude != 0.0) afternoonPlace.longitude else (baseLon + dayOffset + 0.005)
+                val afternoonLoc = afternoonPlace?.locationName ?: "Historic Market, $destName"
+                val afternoonHours = afternoonPlace?.openingHours ?: "10:00 - 20:00"
+                val afternoonNotes = afternoonPlace?.description ?: "Sunset views, souvenir shopping, and local street life in $destName."
+
                 items.add(
                     com.example.data.local.entity.ItineraryItemEntity(
                         id = UUID.randomUUID().toString(),
                         tripId = trip.id,
                         dayNumber = day,
-                        title = "Evening Promenade & Local Bazaars",
-                        locationName = "Historic Market, $destName",
-                        latitude = baseLat + dayOffset + 0.005,
-                        longitude = baseLon + dayOffset + 0.004,
-                        startTime = "17:00",
-                        endTime = "19:30",
+                        title = afternoonTitle,
+                        locationName = afternoonLoc,
+                        latitude = afternoonLat,
+                        longitude = afternoonLon,
+                        startTime = "16:00",
+                        endTime = "18:30",
                         durationMinutes = 150,
-                        category = "Shopping",
-                        estimatedCost = 350.0,
-                        travelTimeFromPrevious = "15 mins",
-                        notes = "Sunset views, souvenir shopping, and local street life.",
-                        source = "TripMate Planner (Verified)",
+                        category = afternoonPlace?.category ?: "Shopping",
+                        estimatedCost = afternoonPlace?.estimatedCost ?: 300.0,
+                        travelTimeFromPrevious = "15 mins cab",
+                        notes = "$afternoonNotes • Hours: $afternoonHours",
+                        source = if (afternoonPlace != null) "Verified Live (Official)" else "TripMate AI Planner",
                         isCompleted = false,
                         orderIndex = 2
                     )
@@ -402,6 +388,192 @@ class GeminiTravelService(
         // Recalculate schedule sequentially: prevents overlapping activities and calculates real Haversine travel times
         TravelScheduleUtils.recalculateSequentialSchedule(items)
     }
+
+    /**
+     * Robust multi-schema parser: handles flat arrays, day-nested objects, and wrapped JSON objects.
+     */
+    private fun parseItineraryResponse(
+        jsonResponse: String,
+        tripId: String,
+        destName: String,
+        baseLat: Double,
+        baseLon: Double,
+        knownPlaces: List<com.example.data.local.entity.PlaceEntity>
+    ): List<com.example.data.local.entity.ItineraryItemEntity> {
+        val items = mutableListOf<com.example.data.local.entity.ItineraryItemEntity>()
+        val trimmed = jsonResponse.trim()
+
+        val jsonStr = if (trimmed.contains("```")) {
+            val start = trimmed.indexOf("```")
+            val nextLine = trimmed.indexOf("\n", start)
+            val end = trimmed.lastIndexOf("```")
+            if (nextLine != -1 && end > nextLine) {
+                trimmed.substring(nextLine + 1, end).trim()
+            } else {
+                trimmed.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+            }
+        } else {
+            trimmed
+        }
+
+        try {
+            val firstBrace = jsonStr.indexOf('{')
+            val firstBracket = jsonStr.indexOf('[')
+
+            if (firstBracket != -1 && (firstBrace == -1 || firstBracket < firstBrace)) {
+                // Flat JSONArray
+                val array = JSONArray(jsonStr.substring(firstBracket))
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    val dayNum = obj.optInt("dayNumber", 1)
+                    parseAndAddItineraryItem(obj, dayNum, items, tripId, destName, baseLat, baseLon, knownPlaces)
+                }
+            } else if (firstBrace != -1) {
+                // Root JSONObject
+                val root = JSONObject(jsonStr.substring(firstBrace))
+
+                // Check for nested days: {"days": [ {"dayNumber": 1, "activities": [...] } ]}
+                val daysArr = root.optJSONArray("days") ?: root.optJSONArray("dayPlan") ?: root.optJSONArray("schedule")
+                if (daysArr != null && daysArr.length() > 0) {
+                    var parsedNested = false
+                    for (d in 0 until daysArr.length()) {
+                        val dayObj = daysArr.optJSONObject(d) ?: continue
+                        val dayNum = dayObj.optInt("dayNumber", dayObj.optInt("day", d + 1))
+                        val actsArr = dayObj.optJSONArray("activities")
+                            ?: dayObj.optJSONArray("items")
+                            ?: dayObj.optJSONArray("places")
+                            ?: dayObj.optJSONArray("stops")
+
+                        if (actsArr != null && actsArr.length() > 0) {
+                            parsedNested = true
+                            for (a in 0 until actsArr.length()) {
+                                val actObj = actsArr.optJSONObject(a) ?: continue
+                                parseAndAddItineraryItem(actObj, dayNum, items, tripId, destName, baseLat, baseLon, knownPlaces)
+                            }
+                        }
+                    }
+                    if (!parsedNested) {
+                        for (i in 0 until daysArr.length()) {
+                            val obj = daysArr.optJSONObject(i) ?: continue
+                            val dayNum = obj.optInt("dayNumber", 1)
+                            parseAndAddItineraryItem(obj, dayNum, items, tripId, destName, baseLat, baseLon, knownPlaces)
+                        }
+                    }
+                } else {
+                    // Check top-level arrays like "itinerary", "items", "activities"
+                    val candidateKeys = listOf("itinerary", "items", "activities", "plan", "data", "results")
+                    for (k in candidateKeys) {
+                        val arr = root.optJSONArray(k)
+                        if (arr != null && arr.length() > 0) {
+                            for (i in 0 until arr.length()) {
+                                val obj = arr.optJSONObject(i) ?: continue
+                                val dayNum = obj.optInt("dayNumber", 1)
+                                parseAndAddItineraryItem(obj, dayNum, items, tripId, destName, baseLat, baseLon, knownPlaces)
+                            }
+                            if (items.isNotEmpty()) break
+                        }
+                    }
+
+                    // Fallback to any array in root
+                    if (items.isEmpty()) {
+                        val keys = root.keys()
+                        while (keys.hasNext()) {
+                            val k = keys.next()
+                            val arr = root.optJSONArray(k)
+                            if (arr != null && arr.length() > 0) {
+                                for (i in 0 until arr.length()) {
+                                    val obj = arr.optJSONObject(i) ?: continue
+                                    val dayNum = obj.optInt("dayNumber", 1)
+                                    parseAndAddItineraryItem(obj, dayNum, items, tripId, destName, baseLat, baseLon, knownPlaces)
+                                }
+                                if (items.isNotEmpty()) break
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("GeminiTravelService", "Failed to parse generated itinerary JSON: ${e.message}")
+        }
+
+        return items
+    }
+
+    private fun parseAndAddItineraryItem(
+        obj: JSONObject,
+        dayNum: Int,
+        items: MutableList<com.example.data.local.entity.ItineraryItemEntity>,
+        tripId: String,
+        destName: String,
+        baseLat: Double,
+        baseLon: Double,
+        knownPlaces: List<com.example.data.local.entity.PlaceEntity>
+    ) {
+        val title = obj.optString("title", obj.optString("name", obj.optString("place", ""))).trim()
+        if (title.isBlank()) return
+
+        val rawLat = obj.optDouble("latitude", 0.0)
+        val rawLon = obj.optDouble("longitude", 0.0)
+        val openingHours = obj.optString("openingHours", "09:00 - 18:00")
+
+        var resolvedLat = rawLat
+        var resolvedLon = rawLon
+
+        if (resolvedLat == 0.0 || resolvedLon == 0.0 || kotlin.math.abs(resolvedLat - baseLat) > 2.0) {
+            val matched = knownPlaces.find {
+                title.contains(it.name, ignoreCase = true) || it.name.contains(title, ignoreCase = true)
+            }
+            if (matched != null && matched.latitude != 0.0) {
+                resolvedLat = matched.latitude
+                resolvedLon = matched.longitude
+            } else {
+                val idx = items.size
+                val angle = (idx * 1.37) % (2.0 * Math.PI)
+                val radiusKm = 0.8 + ((idx * 1.3) % 4.5)
+                resolvedLat = baseLat + (radiusKm * cos(angle)) / 111.0
+                val cosLat = cos(Math.toRadians(baseLat)).coerceAtLeast(0.1)
+                resolvedLon = baseLon + (radiusKm * sin(angle)) / (111.0 * cosLat)
+            }
+        }
+
+        val isVerified = knownPlaces.any { it.name.equals(title, ignoreCase = true) }
+        val sourceLabel = if (isVerified) "Verified Live (Official)" else "AI Researched (Verified Coordinates)"
+
+        val baseNotes = obj.optString("notes", obj.optString("description", "Personalized by Gemini AI"))
+        val notesWithHours = if (openingHours.isNotBlank() && !baseNotes.contains("Open", ignoreCase = true) && !baseNotes.contains("Hours", ignoreCase = true)) {
+            "$baseNotes • Hours: $openingHours"
+        } else {
+            baseNotes
+        }
+
+        val durationMin = obj.optInt("durationMinutes", obj.optInt("duration", 90)).coerceIn(30, 360)
+        val startTime = obj.optString("startTime", "10:00")
+        val endTime = obj.optString("endTime", "")
+        val resolvedEndTime = if (endTime.isNotBlank()) endTime else TravelScheduleUtils.calculateEndTime(startTime, durationMin)
+
+        items.add(
+            com.example.data.local.entity.ItineraryItemEntity(
+                id = UUID.randomUUID().toString(),
+                tripId = tripId,
+                dayNumber = dayNum,
+                title = title,
+                locationName = obj.optString("locationName", "$title, $destName"),
+                latitude = resolvedLat,
+                longitude = resolvedLon,
+                startTime = startTime,
+                endTime = resolvedEndTime,
+                durationMinutes = durationMin,
+                category = obj.optString("category", "Attraction"),
+                estimatedCost = obj.optDouble("estimatedCost", obj.optDouble("cost", 200.0)),
+                travelTimeFromPrevious = obj.optString("travelTimeFromPrevious", "15 mins"),
+                notes = notesWithHours,
+                source = sourceLabel,
+                isCompleted = false,
+                orderIndex = items.filter { it.dayNumber == dayNum }.size
+            )
+        )
+    }
+
 
     /**
      * Fetch real transport tickets (Flight, Train, Bus, Taxi) between origin and destination from Gemini / Web

@@ -244,6 +244,30 @@ object ItineraryPlannerWizard {
         )
 
         // -------------------------------------------------------------
+        // RULE G (Conditional): Mountain Transit & Scenic Routes
+        // Include for hill stations and high-altitude destinations
+        // -------------------------------------------------------------
+        if (isMountain) {
+            val mountainOptions = listOf(
+                "Scenic Road Trip / Private Cab with Mountain Driver",
+                "Heritage Toy Train / Mountain Rail",
+                "Cable Car / Gondola Ride Experience",
+                "Trekking & High-Altitude Scenic Trails"
+            )
+            questionList.add(
+                QuestionnaireStep(
+                    id = "mountain_transport",
+                    stepNumber = 0,
+                    category = "MOUNTAIN",
+                    questionTitle = "Mountain Transit & Scenic Exploration",
+                    description = "How would you like to explore the mountain roads and viewpoints in $destTrimmed?",
+                    options = mountainOptions,
+                    selectedOption = previousAnswers["mountain_transport"] ?: mountainOptions.first()
+                )
+            )
+        }
+
+        // -------------------------------------------------------------
         // RULE H (Conditional): Coastal & Water Activities
         // Include for beach and coastal regions
         // -------------------------------------------------------------
