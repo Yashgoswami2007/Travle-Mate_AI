@@ -88,20 +88,27 @@ fun AuthScreen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // App Logo & Header in Warm Terracotta Orange & Navy
-            Box(
+            // App Official Logo & Header
+            Card(
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                 modifier = Modifier
-                    .size(76.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(TravelTerracotta),
-                contentAlignment = Alignment.Center
+                    .size(84.dp)
+                    .testTag("app_official_logo")
             ) {
-                Icon(
-                    Icons.Filled.Explore,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(42.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.ic_official_logo),
+                        contentDescription = "TripMate AI Official Logo",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

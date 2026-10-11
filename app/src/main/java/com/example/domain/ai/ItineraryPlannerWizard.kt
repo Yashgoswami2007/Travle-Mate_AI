@@ -159,34 +159,14 @@ object ItineraryPlannerWizard {
 
         // -------------------------------------------------------------
         // RULE C (Always Include): Accommodation Style
-        // Options adapt to companion group (Solo, Couple, Family, Friends)
         // -------------------------------------------------------------
-        val stayOptions = when {
-            travellerType.equals("Solo", ignoreCase = true) -> listOf(
-                "Social Backpacker Hostel & Pods",
-                "Cozy Boutique B&B / Studio",
-                "Centrally Located 3-4 Star Comfort",
-                "Quiet Work-Friendly Hotel"
-            )
-            travellerType.equals("Family", ignoreCase = true) -> listOf(
-                "Family Suite / Interconnecting Rooms",
-                "Kid-Friendly Resort with Pool",
-                "Full-Service 4-Star Hotel",
-                "Spacious Vacation Apartment"
-            )
-            travellerType.equals("Friends", ignoreCase = true) -> listOf(
-                "Private Villa / Serviced Apartment",
-                "Lively Social Hostel / Shared Rooms",
-                "Comfort Hotel with Multi-Beds",
-                "Adventure Resort / Glamping"
-            )
-            else -> listOf( // Couple default
-                "Heritage Boutique Haveli / Hotel",
-                "Romantic Scenic View Resort",
-                "Modern 4-Star Comfort",
-                "Luxury Palace / 5-Star Stay"
-            )
-        }
+        val stayOptions = listOf(
+            "Hostel / Backpacker",
+            "Budget Hotel",
+            "Comfort Hotel (3-4 Star)",
+            "Luxury Resort (5 Star)",
+            "Villa / Apartment"
+        )
 
         questionList.add(
             QuestionnaireStep(
@@ -194,9 +174,9 @@ object ItineraryPlannerWizard {
                 stepNumber = 0,
                 category = "STAY",
                 questionTitle = "Stay & Accommodation Style",
-                description = "What type of lodging matches your $travellerType group vibe in $destTrimmed?",
+                description = "What is your preferred style of accommodation?",
                 options = stayOptions,
-                selectedOption = previousAnswers["accommodation"] ?: stayOptions.first()
+                selectedOption = previousAnswers["accommodation"] ?: stayOptions[2]
             )
         )
 
@@ -204,11 +184,11 @@ object ItineraryPlannerWizard {
         // RULE D (Always Include): Food & Dietary Preferences
         // -------------------------------------------------------------
         val foodOptions = listOf(
-            "100% Pure Vegetarian & Jain Friendly",
-            "Regional Specialties & Street Food Walks",
-            "Non-Vegetarian & Signature Local Dishes",
-            "Vegan & Contemporary Cafés",
-            "Multi-Cuisine & International Comfort Dining"
+            "Pure Vegetarian",
+            "Jain Friendly",
+            "Non-Vegetarian",
+            "Vegan",
+            "Multi-Cuisine"
         )
         questionList.add(
             QuestionnaireStep(
@@ -216,7 +196,7 @@ object ItineraryPlannerWizard {
                 stepNumber = 0,
                 category = "DINING",
                 questionTitle = "Food & Dietary Preferences",
-                description = "Any dietary styles or culinary priorities to adhere to in $destTrimmed?",
+                description = "What are your dietary preferences?",
                 options = foodOptions,
                 selectedOption = previousAnswers["food_preferences"] ?: foodOptions.first()
             )
@@ -242,51 +222,26 @@ object ItineraryPlannerWizard {
             )
         )
 
+
         // -------------------------------------------------------------
-        // RULE F (Always Include): Travel Style & Activity Priorities
+        // RULE J (Always Include): Budget Scope
         // -------------------------------------------------------------
-        val styleOptions = listOf(
-            "History, Forts & Architectural Heritage",
-            "Nature, Scenic Viewpoints & Outdoor Walks",
-            "Local Bazaars, Artisan Crafts & Shopping",
-            "Rooftop Sunset Views & Evening Dining",
-            "Hidden Gems, Photography & Café Culture"
+        val budgetOptions = listOf(
+            "Yes, all-inclusive (₹${budget.toInt()} covers stay, transit & sights)",
+            "No, stay, food & activities only (intercity transit separate)",
+            "Flexible budget with 15% contingency buffer"
         )
         questionList.add(
             QuestionnaireStep(
-                id = "travel_style",
+                id = "budget_scope",
                 stepNumber = 0,
-                category = "ACTIVITIES",
-                questionTitle = "Trip Highlights & Theme",
-                description = "What experiences matter most to you in $destTrimmed?",
-                options = styleOptions,
-                selectedOption = previousAnswers["travel_style"] ?: styleOptions.first()
+                category = "BUDGET",
+                questionTitle = "Budget Scope",
+                description = "Does your ₹${budget.toInt()} estimated budget cover intercity transit?",
+                options = budgetOptions,
+                selectedOption = previousAnswers["budget_scope"] ?: budgetOptions.first()
             )
         )
-
-        // -------------------------------------------------------------
-        // RULE G (Conditional): Mountain Transport & Terrain
-        // Include for hill stations, mountains, snow regions
-        // -------------------------------------------------------------
-        if (isMountain) {
-            val mountainOptions = listOf(
-                "Dedicated Mountain Cab with Experienced Local Driver",
-                "Scenic Mountain Railway / Toy Train & Walk",
-                "Self-Drive 4x4 SUV",
-                "Shared Sightseeing Jeeps & Cable Cars"
-            )
-            questionList.add(
-                QuestionnaireStep(
-                    id = "mountain_transport",
-                    stepNumber = 0,
-                    category = "TERRAIN",
-                    questionTitle = "Mountain Transit & Route Pacing",
-                    description = "How would you prefer to navigate mountain roads and steep viewpoints in $destTrimmed?",
-                    options = mountainOptions,
-                    selectedOption = previousAnswers["mountain_transport"] ?: mountainOptions.first()
-                )
-            )
-        }
 
         // -------------------------------------------------------------
         // RULE H (Conditional): Coastal & Water Activities
@@ -336,25 +291,6 @@ object ItineraryPlannerWizard {
             )
         }
 
-        // -------------------------------------------------------------
-        // RULE J (Conditional): Budget Scope
-        // -------------------------------------------------------------
-        val budgetOptions = listOf(
-            "Yes, all-inclusive (₹${budget.toInt()} covers stay, transit & sights)",
-            "No, stay, food & activities only (intercity transit separate)",
-            "Flexible budget with 15% contingency buffer"
-        )
-        questionList.add(
-            QuestionnaireStep(
-                id = "budget_scope",
-                stepNumber = 0,
-                category = "BUDGET",
-                questionTitle = "Budget Scope",
-                description = "Does your ₹${budget.toInt()} estimated budget cover intercity transit?",
-                options = budgetOptions,
-                selectedOption = previousAnswers["budget_scope"] ?: budgetOptions.first()
-            )
-        )
 
         // Assign clean 1-based sequential step numbers
         return questionList.mapIndexed { index, step ->

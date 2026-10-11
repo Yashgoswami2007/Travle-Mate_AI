@@ -2,6 +2,7 @@ package com.example.ui.screens.itinerary_wizard
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -24,6 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material.icons.filled.*
 import com.example.domain.ai.TravelDateUtils
 import com.example.ui.components.TravelBadge
@@ -32,7 +35,7 @@ import com.example.ui.theme.*
 import com.example.ui.viewmodel.MainViewModel
 import java.time.LocalDate
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TripWizardScreen(
     viewModel: MainViewModel,
@@ -49,6 +52,11 @@ fun TripWizardScreen(
     val endDate by viewModel.wizardEndDate.collectAsState()
     val travellers by viewModel.wizardTravellers.collectAsState()
     val travellerType by viewModel.wizardTravellerType.collectAsState()
+    val liveLocations by viewModel.liveLocationResults.collectAsState()
+    val isSearchingLocations by viewModel.isSearchingLocations.collectAsState()
+
+    var originExpanded by remember { mutableStateOf(false) }
+    var destinationExpanded by remember { mutableStateOf(false) }
 
     var showCustomDateDialog by remember { mutableStateOf(false) }
     var customStartInput by remember { mutableStateOf(startDate) }
@@ -67,9 +75,9 @@ fun TripWizardScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("AI Trip Planner Wizard", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("Design Your Trip", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(
-                            text = "Personalizing for $destinationName • $durationLabel",
+                            text = "Planning for $destinationName • $durationLabel",
                             fontSize = 12.sp,
                             color = TextSecondary
                         )
@@ -90,39 +98,24 @@ fun TripWizardScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Button(
+                        onClick = { viewModel.completeWizardAndGenerateTrip() },
+                        enabled = !isGenerating,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = TravelNavyPrimary),
+                        modifier = Modifier
+                            .testTag("generate_itinerary_button")
+                            .fillMaxWidth()
+                            .height(52.dp)
                     ) {
-                        Column {
-                            Text("Total Budget Scope", fontSize = 11.sp, color = TextSecondary)
-                            Text(
-                                text = "₹$budget ($durationLabel)",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TravelNavyPrimary
-                            )
-                        }
-
-                        Button(
-                            onClick = { viewModel.completeWizardAndGenerateTrip() },
-                            enabled = !isGenerating,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TravelNavyPrimary),
-                            modifier = Modifier
-                                .testTag("generate_itinerary_button")
-                                .height(48.dp)
-                        ) {
-                            if (isGenerating) {
-                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Synthesizing Plan...")
-                            } else {
-                                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TravelAmberAccent, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Generate Itinerary", fontWeight = FontWeight.Bold)
-                            }
+                        if (isGenerating) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Synthesizing Plan...")
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TravelAmberAccent, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Generate Itinerary", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -145,18 +138,18 @@ fun TripWizardScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TravelBadge(text = "STEP 1: TAILORED TRAVEL ENGINE", containerColor = TravelAmberAccent, contentColor = Color.Black)
+                            TravelBadge(text = "CRAFTING YOUR PERFECT TRIP", containerColor = TravelAmberAccent, contentColor = Color.Black)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tailoring your $durationLabel to $destinationName",
+                            text = "Let's craft your $destinationName getaway",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Contextually tuned for $travellerType ($travellers travelers). Dates, opening hours, local transit, and budget will be verified.",
+                            text = "Tell us about your travel style and preferences. We'll handle the logistics, verified routes, and budget tracking for your $travellerType group.",
                             fontSize = 12.sp,
                             color = Color.White.copy(alpha = 0.85f),
                             lineHeight = 16.sp
@@ -176,37 +169,134 @@ fun TripWizardScreen(
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Text("Core Trip Boundaries", fontWeight = FontWeight.Bold, fontSize = 15.sp)
 
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Origin Dropdown
+                        ExposedDropdownMenuBox(
+                            expanded = originExpanded,
+                            onExpandedChange = { originExpanded = !originExpanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = startingCity,
+                                onValueChange = { 
+                                    viewModel.setWizardStartingCity(it)
+                                    originExpanded = true
+                                    if (it.isNotBlank()) viewModel.onSearchQueryChanged("$it, India") else viewModel.onSearchQueryChanged("")
+                                },
+                                label = { Text("From") },
+                                leadingIcon = { Icon(Icons.Default.FlightTakeoff, contentDescription = null, tint = TravelNavyPrimary) },
+                                trailingIcon = { 
+                                    if (isSearchingLocations && startingCity.isNotBlank()) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                },
+                                textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF0F172A), fontSize = 15.sp),
+                                colors = travelTextFieldColors(),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                            )
+                            if (originExpanded && liveLocations.isNotEmpty()) {
+                                val indianLiveLocations = liveLocations.filter { it.country.equals("India", ignoreCase = true) }
+                                if (indianLiveLocations.isNotEmpty()) {
+                                    ExposedDropdownMenu(
+                                        expanded = originExpanded,
+                                        onDismissRequest = { originExpanded = false },
+                                        modifier = Modifier.background(TravelSandBackground)
+                                    ) {
+                                        indianLiveLocations.forEach { loc ->
+                                            DropdownMenuItem(
+                                                text = { 
+                                                    Column {
+                                                        Text(loc.name, color = TravelNavyDark, fontWeight = FontWeight.Bold)
+                                                        Text("${loc.stateRegion}, ${loc.country}", color = TravelNavyDark.copy(alpha=0.7f), fontSize = 12.sp)
+                                                    }
+                                                },
+                                                onClick = {
+                                                    viewModel.setWizardStartingCity("${loc.name}, ${loc.stateRegion}")
+                                                    originExpanded = false
+                                                    viewModel.onSearchQueryChanged("")
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Destination Dropdown
+                        ExposedDropdownMenuBox(
+                            expanded = destinationExpanded,
+                            onExpandedChange = { destinationExpanded = !destinationExpanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             OutlinedTextField(
                                 value = destinationName,
-                                onValueChange = { viewModel.setWizardDestination(it) },
-                                label = { Text("Destination") },
+                                onValueChange = { 
+                                    viewModel.setWizardDestination(it)
+                                    destinationExpanded = true
+                                    if (it.isNotBlank()) viewModel.onSearchQueryChanged("$it, India") else viewModel.onSearchQueryChanged("")
+                                },
+                                label = { Text("To") },
+                                leadingIcon = { Icon(Icons.Default.Place, contentDescription = null, tint = TravelTerracotta) },
+                                trailingIcon = { 
+                                    if (isSearchingLocations && destinationName.isNotBlank()) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                },
+                                textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF0F172A), fontSize = 15.sp),
+                                colors = travelTextFieldColors(),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                            )
+                            if (destinationExpanded && liveLocations.isNotEmpty()) {
+                                val indianLiveLocations = liveLocations.filter { it.country.equals("India", ignoreCase = true) }
+                                if (indianLiveLocations.isNotEmpty()) {
+                                    ExposedDropdownMenu(
+                                        expanded = destinationExpanded,
+                                        onDismissRequest = { destinationExpanded = false },
+                                        modifier = Modifier.background(TravelSandBackground)
+                                    ) {
+                                        indianLiveLocations.forEach { loc ->
+                                            DropdownMenuItem(
+                                                text = { 
+                                                    Column {
+                                                        Text(loc.name, color = TravelNavyDark, fontWeight = FontWeight.Bold)
+                                                        Text("${loc.stateRegion}, ${loc.country}", color = TravelNavyDark.copy(alpha=0.7f), fontSize = 12.sp)
+                                                    }
+                                                },
+                                                onClick = {
+                                                    viewModel.setWizardDestination("${loc.name}, ${loc.stateRegion}")
+                                                    destinationExpanded = false
+                                                    viewModel.onSearchQueryChanged("")
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedTextField(
+                                value = budget,
+                                onValueChange = { viewModel.setWizardBudget(it) },
+                                label = { Text("Budget (₹)") },
+                                leadingIcon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = TravelForestGreen) },
                                 textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF0F172A), fontSize = 15.sp),
                                 colors = travelTextFieldColors(),
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
+                            
                             OutlinedTextField(
-                                value = startingCity,
-                                onValueChange = { viewModel.setWizardStartingCity(it) },
-                                label = { Text("Origin City") },
+                                value = if (travellers > 0) travellers.toString() else "",
+                                onValueChange = { 
+                                    val count = it.toIntOrNull() ?: 0
+                                    viewModel.setWizardTravellers(count) 
+                                },
+                                label = { Text("Tripmates") },
+                                leadingIcon = { Icon(Icons.Default.Group, contentDescription = null, tint = TravelNavyPrimary) },
                                 textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF0F172A), fontSize = 15.sp),
                                 colors = travelTextFieldColors(),
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
                         }
-
-                        // Budget Input
-                        OutlinedTextField(
-                            value = budget,
-                            onValueChange = { viewModel.setWizardBudget(it) },
-                            label = { Text("Estimated Total Budget (₹)") },
-                            textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF0F172A), fontSize = 15.sp),
-                            colors = travelTextFieldColors(),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
                     }
                 }
             }
@@ -278,139 +368,6 @@ fun TripWizardScreen(
                             }
                         }
 
-                        // Quick Preset Chips
-                        Text("Quick Date Presets:", fontSize = 12.sp, color = TextSecondary)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            val today = LocalDate.now()
-                            // Next Weekend (Friday to Sunday = 3 Days, 2 Nights)
-                            val nextFri = today.plusDays(((5 - today.dayOfWeek.value + 7) % 7 + 7).toLong())
-                            val nextSun = nextFri.plusDays(2)
-
-                            // Long Weekend (Thursday to Sunday = 4 Days, 3 Nights)
-                            val longThu = today.plusDays(((4 - today.dayOfWeek.value + 7) % 7 + 7).toLong())
-                            val longSun = longThu.plusDays(3)
-
-                            // Week Trip (Saturday to Friday = 7 Days, 6 Nights)
-                            val weekSat = today.plusDays(((6 - today.dayOfWeek.value + 7) % 7 + 7).toLong())
-                            val weekFri = weekSat.plusDays(6)
-
-                            AssistChip(
-                                onClick = {
-                                    viewModel.updateWizardDates(
-                                        TravelDateUtils.formatDisplayDate(nextFri),
-                                        TravelDateUtils.formatDisplayDate(nextSun)
-                                    )
-                                },
-                                label = { Text("Weekend (3D)", fontSize = 11.sp) }
-                            )
-
-                            AssistChip(
-                                onClick = {
-                                    viewModel.updateWizardDates(
-                                        TravelDateUtils.formatDisplayDate(longThu),
-                                        TravelDateUtils.formatDisplayDate(longSun)
-                                    )
-                                },
-                                label = { Text("Long Wknd (4D)", fontSize = 11.sp) }
-                            )
-
-                            AssistChip(
-                                onClick = {
-                                    viewModel.updateWizardDates(
-                                        TravelDateUtils.formatDisplayDate(weekSat),
-                                        TravelDateUtils.formatDisplayDate(weekFri)
-                                    )
-                                },
-                                label = { Text("Week (7D)", fontSize = 11.sp) }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Traveler Group & Count Card
-            item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = TravelSurfaceCard),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Icon(Icons.Default.Group, contentDescription = null, tint = TravelNavyPrimary, modifier = Modifier.size(18.dp))
-                                Text("Travel Party & Group Vibe", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            }
-
-                            // Stepper: - Count +
-                            Surface(
-                                shape = RoundedCornerShape(20.dp),
-                                color = TravelSandBackground,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, TravelBorderSubtle)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                ) {
-                                    IconButton(
-                                        onClick = { viewModel.setWizardTravellers(travellers - 1) },
-                                        enabled = travellers > 1,
-                                        modifier = Modifier.size(28.dp)
-                                    ) {
-                                        Icon(Icons.Default.Remove, contentDescription = "Decrease", modifier = Modifier.size(14.dp))
-                                    }
-
-                                    Text(
-                                        text = "$travellers",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = TravelNavyPrimary,
-                                        modifier = Modifier.padding(horizontal = 4.dp)
-                                    )
-
-                                    IconButton(
-                                        onClick = { viewModel.setWizardTravellers(travellers + 1) },
-                                        modifier = Modifier.size(28.dp)
-                                    ) {
-                                        Icon(Icons.Default.Add, contentDescription = "Increase", modifier = Modifier.size(14.dp))
-                                    }
-                                }
-                            }
-                        }
-
-                        // Companion Vibe Chips
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            listOf("Solo", "Couple", "Friends", "Family").forEach { type ->
-                                val isSelected = travellerType.equals(type, ignoreCase = true)
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = {
-                                        viewModel.setWizardTravellerType(type)
-                                        if (type == "Solo") viewModel.setWizardTravellers(1)
-                                        else if (type == "Couple") viewModel.setWizardTravellers(2)
-                                        else if (type == "Friends" && travellers < 3) viewModel.setWizardTravellers(3)
-                                        else if (type == "Family" && travellers < 3) viewModel.setWizardTravellers(4)
-                                    },
-                                    label = { Text(type, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = TravelNavyPrimary,
-                                        selectedLabelColor = Color.White
-                                    )
-                                )
-                            }
-                        }
                     }
                 }
             }
@@ -423,16 +380,10 @@ fun TripWizardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Adaptive Context Questions (${questions.size})",
+                        text = "Personalize Your Experience",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
-                    )
-                    Text(
-                        text = "Auto-tuned",
-                        fontSize = 11.sp,
-                        color = TravelForestGreen,
-                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -450,18 +401,6 @@ fun TripWizardScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Surface(
-                                color = TravelNavyContainer,
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    text = "Q${q.stepNumber}",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TravelNavyDark,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
                             Surface(
                                 color = TravelAmberAccent.copy(alpha = 0.15f),
                                 shape = RoundedCornerShape(6.dp)
@@ -491,44 +430,39 @@ fun TripWizardScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Selectable options
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            q.options.forEach { opt ->
-                                val isSelected = q.selectedOption == opt
-                                Surface(
-                                    onClick = {
-                                        val updated = questions.toMutableList()
-                                        updated[index] = q.copy(selectedOption = opt)
-                                        viewModel.wizardQuestions.value = updated
-                                    },
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = if (isSelected) TravelNavyPrimary.copy(alpha = 0.08f) else TravelSandBackground,
-                                    border = androidx.compose.foundation.BorderStroke(
-                                        width = if (isSelected) 1.5.dp else 1.dp,
-                                        color = if (isSelected) TravelNavyPrimary else TravelBorderSubtle
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            text = opt,
-                                            fontSize = 13.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (isSelected) TravelNavyPrimary else TextPrimary
-                                        )
-                                        if (isSelected) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = "Selected",
-                                                tint = TravelNavyPrimary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
+                        // Question Dropdown
+                        var qExpanded by remember { mutableStateOf(false) }
+                        
+                        ExposedDropdownMenuBox(
+                            expanded = qExpanded,
+                            onExpandedChange = { qExpanded = !qExpanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = q.selectedOption ?: "",
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Select Option") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = qExpanded) },
+                                colors = travelTextFieldColors(),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = qExpanded,
+                                onDismissRequest = { qExpanded = false },
+                                modifier = Modifier.background(TravelSandBackground)
+                            ) {
+                                q.options.forEach { opt ->
+                                    DropdownMenuItem(
+                                        text = { Text(opt, color = TravelNavyDark) },
+                                        onClick = {
+                                            val updated = questions.toMutableList()
+                                            updated[index] = q.copy(selectedOption = opt)
+                                            viewModel.wizardQuestions.value = updated
+                                            qExpanded = false
                                         }
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -544,50 +478,23 @@ fun TripWizardScreen(
 
     // Custom Date Range Input Dialog
     if (showCustomDateDialog) {
-        val parsedStart = TravelDateUtils.parseDate(customStartInput)
-        val parsedEnd = TravelDateUtils.parseDate(customEndInput)
-        val previewDays = TravelDateUtils.calculateDays(parsedStart, parsedEnd)
-        val previewNights = TravelDateUtils.calculateNights(previewDays)
-
-        AlertDialog(
+        val dateRangePickerState = rememberDateRangePickerState()
+        
+        DatePickerDialog(
             onDismissRequest = { showCustomDateDialog = false },
-            title = {
-                Text("Select Exact Travel Dates", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Calculates inclusive days ($previewDays Days • $previewNights Nights):",
-                        fontSize = 12.sp,
-                        color = TravelNavyPrimary,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    OutlinedTextField(
-                        value = customStartInput,
-                        onValueChange = { customStartInput = it },
-                        label = { Text("Start Date (e.g. Nov 14, 2026)") },
-                        textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF0F172A), fontSize = 14.sp),
-                        colors = travelTextFieldColors(),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = customEndInput,
-                        onValueChange = { customEndInput = it },
-                        label = { Text("End Date (e.g. Nov 19, 2026)") },
-                        textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF0F172A), fontSize = 14.sp),
-                        colors = travelTextFieldColors(),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.updateWizardDates(customStartInput.trim(), customEndInput.trim())
+                        val startMillis = dateRangePickerState.selectedStartDateMillis
+                        val endMillis = dateRangePickerState.selectedEndDateMillis
+                        if (startMillis != null && endMillis != null) {
+                            val startLd = java.time.Instant.ofEpochMilli(startMillis).atZone(java.time.ZoneId.of("UTC")).toLocalDate()
+                            val endLd = java.time.Instant.ofEpochMilli(endMillis).atZone(java.time.ZoneId.of("UTC")).toLocalDate()
+                            viewModel.updateWizardDates(
+                                TravelDateUtils.formatDisplayDate(startLd),
+                                TravelDateUtils.formatDisplayDate(endLd)
+                            )
+                        }
                         showCustomDateDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = TravelNavyPrimary)
@@ -600,7 +507,12 @@ fun TripWizardScreen(
                     Text("Cancel")
                 }
             }
-        )
+        ) {
+            DateRangePicker(
+                state = dateRangePickerState,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 
     // Modal Loading Progress Dialog when Gemini AI is generating itinerary & options
