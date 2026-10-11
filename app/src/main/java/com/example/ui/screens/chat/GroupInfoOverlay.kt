@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
 import com.example.ui.viewmodel.MainViewModel
 import com.example.ui.theme.*
 
@@ -29,6 +30,8 @@ fun GroupInfoOverlay(
     viewModel: MainViewModel,
     onClose: () -> Unit
 ) {
+    BackHandler(onBack = onClose)
+
     // In a full implementation, we'd fetch members and group details from the backend
     // For MVP, this is a placeholder UI showing the intent of Phase 8.3
 

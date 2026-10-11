@@ -57,9 +57,44 @@ class ChatRepository(
     private val _conversations = MutableStateFlow<List<ChatConversation>>(emptyList())
     val conversations: StateFlow<List<ChatConversation>> = _conversations.asStateFlow()
 
+    private val mockMessages = mutableListOf(
+        PeerMessage(
+            id = "mock1",
+            conversationId = "demo_shimla_gc",
+            senderId = "testuser1",
+            type = "TEXT",
+            textContent = "Hey everyone! Are we ready for Shimla?",
+            createdAt = System.currentTimeMillis() - 100000,
+            isFromMe = false
+        ),
+        PeerMessage(
+            id = "mock2",
+            conversationId = "demo_shimla_gc",
+            senderId = "testuser2",
+            type = "TEXT",
+            textContent = "Excited for the trip! 🎉",
+            createdAt = System.currentTimeMillis() - 50000,
+            isFromMe = false
+        )
+    )
+
     suspend fun refreshConversations() = withContext(Dispatchers.IO) {
         val identity = identityRepo.getIdentity() ?: return@withContext
+        val demoChat = ChatConversation(
+            id = "demo_shimla_gc",
+            type = "GROUP",
+            title = "Shimla",
+            imagePath = null,
+            createdBy = "system",
+            createdAt = System.currentTimeMillis(),
+            lastMessageAt = System.currentTimeMillis(),
+            unreadCount = 2,
+            lastMessagePreview = mockMessages.lastOrNull()?.textContent ?: "Attachment"
+        )
+
         if (supabaseUrl.isBlank() || supabaseUrl.contains("your-project") || apiKey.isEmpty()) {
+            // Load Demo Data for UI testing
+            _conversations.value = listOf(demoChat)
             return@withContext
         }
 
@@ -99,10 +134,18 @@ class ChatRepository(
                         )
                     )
                 }
+                // Always add demo chat for testing
+                if (list.none { it.id == demoChat.id }) {
+                    list.add(0, demoChat)
+                }
                 _conversations.value = list
+            } else {
+                // If network fails but they have a url, still show demo
+                _conversations.value = listOf(demoChat)
             }
         } catch (e: Exception) {
             Log.e(tag, "Failed to refresh conversations", e)
+            _conversations.value = listOf(demoChat)
         }
     }
     
@@ -346,7 +389,13 @@ class ChatRepository(
 
     suspend fun getMessages(conversationId: String): List<PeerMessage> = withContext(Dispatchers.IO) {
         val currentIdentity = identityRepo.getIdentity() ?: return@withContext emptyList()
-        if (supabaseUrl.isBlank() || supabaseUrl.contains("your-project") || apiKey.isEmpty()) return@withContext emptyList()
+        if (conversationId == "demo_shimla_gc") {
+            return@withContext mockMessages.toList()
+        }
+        
+        if (supabaseUrl.isBlank() || supabaseUrl.contains("your-project") || apiKey.isEmpty()) {
+            return@withContext emptyList()
+        }
         
         try {
             // Using PostgREST to join chat_messages with chat_attachments
@@ -409,7 +458,34 @@ class ChatRepository(
         mimeType: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
         val currentIdentity = identityRepo.getIdentity() ?: return@withContext false
-        if (supabaseUrl.isBlank() || supabaseUrl.contains("your-project") || apiKey.isEmpty()) return@withContext false
+        if (conversationId == "demo_shimla_gc") {
+            val newMsg = PeerMessage(
+                id = UUID.randomUUID().toString(),
+                conversationId = conversationId,
+                senderId = currentIdentity.id,
+                type = type,
+                textContent = text,
+                attachmentPath = attachmentPath,
+                mimeType = mimeType,
+                createdAt = System.currentTimeMillis(),
+                isFromMe = true
+            )
+            mockMessages.add(newMsg)
+            
+            val currentConvs = _conversations.value.toMutableList()
+            val idx = currentConvs.indexOfFirst { it.id == "demo_shimla_gc" }
+            if (idx != -1) {
+                currentConvs[idx] = currentConvs[idx].copy(
+                    lastMessagePreview = text ?: if (attachmentPath != null) "Attachment" else ""
+                )
+                _conversations.value = currentConvs
+            }
+            return@withContext true
+        }
+
+        if (supabaseUrl.isBlank() || supabaseUrl.contains("your-project") || apiKey.isEmpty()) {
+            return@withContext false
+        }
 
         try {
             val jsonMediaType = "application/json; charset=utf-8".toMediaType()

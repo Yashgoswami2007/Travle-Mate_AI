@@ -100,7 +100,106 @@ fun ChatConversationScreen(convId: String, viewModel: MainViewModel) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = TravelSandBackground)
             )
         },
-        containerColor = TravelSandBackground
+        containerColor = TravelSandBackground,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = {
+            Surface(
+                color = Color.White,
+                tonalElevation = 8.dp,
+                shadowElevation = 8.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box {
+                        IconButton(
+                            onClick = { showAttachmentMenu = true },
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = "Attach", tint = TravelNavyPrimary)
+                        }
+                        
+                        DropdownMenu(
+                            expanded = showAttachmentMenu,
+                            onDismissRequest = { showAttachmentMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Photos") },
+                                leadingIcon = { Icon(Icons.Filled.Image, contentDescription = null, tint = TravelNavyPrimary) },
+                                onClick = { 
+                                    showAttachmentMenu = false
+                                    filePickerLauncher.launch("image/*") 
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Videos") },
+                                leadingIcon = { Icon(Icons.Filled.Videocam, contentDescription = null, tint = TravelNavyPrimary) },
+                                onClick = { 
+                                    showAttachmentMenu = false
+                                    filePickerLauncher.launch("video/*") 
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Document") },
+                                leadingIcon = { Icon(Icons.Filled.InsertDriveFile, contentDescription = null, tint = TravelNavyPrimary) },
+                                onClick = { 
+                                    showAttachmentMenu = false
+                                    filePickerLauncher.launch("application/*") 
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Facial Recognition") },
+                                leadingIcon = { Icon(Icons.Filled.Face, contentDescription = null, tint = TravelNavyPrimary) },
+                                onClick = { 
+                                    showAttachmentMenu = false
+                                    showFacialRecognition = true
+                                }
+                            )
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = messageText,
+                        onValueChange = { messageText = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Type a message...") },
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = TravelSandBackground,
+                            unfocusedContainerColor = TravelSandBackground,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent
+                        ),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                        maxLines = 4
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    IconButton(
+                        onClick = {
+                            if (messageText.isNotBlank()) {
+                                viewModel.sendPeerMessage(convId, messageText)
+                                messageText = ""
+                            }
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(TravelNavyPrimary, RoundedCornerShape(24.dp))
+                    ) {
+                        Icon(
+                            Icons.Filled.Send,
+                            contentDescription = "Send",
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+        }
     ) { paddingValues ->
         if (isGroupInfoOpen) {
             GroupInfoOverlay(
@@ -110,18 +209,15 @@ fun ChatConversationScreen(convId: String, viewModel: MainViewModel) {
             )
         } else if (showFacialRecognition) {
             FacialRecognitionOverlay(
+                convId = convId,
+                viewModel = viewModel,
                 onClose = { showFacialRecognition = false }
             )
         } else {
-            Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
             LazyColumn(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxSize()
+                    .padding(paddingValues),
                 contentPadding = PaddingValues(16.dp),
                 reverseLayout = true
             ) {
@@ -220,106 +316,6 @@ fun ChatConversationScreen(convId: String, viewModel: MainViewModel) {
                     }
                 }
             }
-
-            // Message Composer
-            Surface(
-                color = Color.White,
-                tonalElevation = 8.dp,
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .navigationBarsPadding()
-                        .imePadding(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box {
-                        IconButton(
-                            onClick = { showAttachmentMenu = true },
-                            modifier = Modifier.padding(end = 4.dp)
-                        ) {
-                            Icon(Icons.Filled.Add, contentDescription = "Attach", tint = TravelNavyPrimary)
-                        }
-                        
-                        DropdownMenu(
-                            expanded = showAttachmentMenu,
-                            onDismissRequest = { showAttachmentMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Photos") },
-                                leadingIcon = { Icon(Icons.Filled.Image, contentDescription = null, tint = TravelNavyPrimary) },
-                                onClick = { 
-                                    showAttachmentMenu = false
-                                    filePickerLauncher.launch("image/*") 
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Videos") },
-                                leadingIcon = { Icon(Icons.Filled.Videocam, contentDescription = null, tint = TravelNavyPrimary) },
-                                onClick = { 
-                                    showAttachmentMenu = false
-                                    filePickerLauncher.launch("video/*") 
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Document") },
-                                leadingIcon = { Icon(Icons.Filled.InsertDriveFile, contentDescription = null, tint = TravelNavyPrimary) },
-                                onClick = { 
-                                    showAttachmentMenu = false
-                                    filePickerLauncher.launch("application/*") 
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Facial Recognition") },
-                                leadingIcon = { Icon(Icons.Filled.Face, contentDescription = null, tint = TravelNavyPrimary) },
-                                onClick = { 
-                                    showAttachmentMenu = false
-                                    showFacialRecognition = true
-                                }
-                            )
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = messageText,
-                        onValueChange = { messageText = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Type a message...") },
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = TravelSandBackground,
-                            unfocusedContainerColor = TravelSandBackground,
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedBorderColor = Color.Transparent
-                        ),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-                        maxLines = 4
-                    )
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    IconButton(
-                        onClick = {
-                            if (messageText.isNotBlank()) {
-                                viewModel.sendPeerMessage(convId, messageText)
-                                messageText = ""
-                            }
-                        },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(TravelNavyPrimary, RoundedCornerShape(24.dp))
-                    ) {
-                        Icon(
-                            Icons.Filled.Send,
-                            contentDescription = "Send",
-                            tint = Color.White
-                        )
-                    }
-                }
-            }
         }
     }
-}
 }

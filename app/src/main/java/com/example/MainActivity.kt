@@ -3,6 +3,7 @@ package com.example
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
@@ -30,6 +31,7 @@ import com.example.ui.screens.home.HomeScreen
 import com.example.ui.screens.itinerary_wizard.TripWizardScreen
 import com.example.ui.screens.profile.ProfileScreen
 import com.example.ui.screens.trip.TripDetailScreen
+import com.example.ui.screens.onboarding.OnboardingScreen
 import com.example.ui.screens.trip.TripsListScreen
 import com.example.ui.screens.chat.ChatInboxScreen
 import com.example.ui.screens.chat.ChatConversationScreen
@@ -70,6 +72,24 @@ class MainActivity : ComponentActivity() {
                 val currentScreen by mainViewModel.currentScreen.collectAsState()
                 val context = LocalContext.current
                 val snackbarHostState = remember { SnackbarHostState() }
+                var lastBackPressTime by remember { mutableLongStateOf(0L) }
+
+                BackHandler {
+                    if (currentScreen == Screen.Home || currentScreen == Screen.Onboarding) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastBackPressTime < 2000L) {
+                            (context as? ComponentActivity)?.finish()
+                        } else {
+                            lastBackPressTime = now
+                            Toast.makeText(context, "Press back again to exit", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        val navigated = mainViewModel.navigateBack()
+                        if (!navigated) {
+                            mainViewModel.navigateTo(Screen.Home)
+                        }
+                    }
+                }
 
                 // Collect toasts and snackbars
                 LaunchedEffect(Unit) {
@@ -239,6 +259,7 @@ class MainActivity : ComponentActivity() {
                             is Screen.ChatInbox -> ChatInboxScreen(viewModel = mainViewModel)
                             is Screen.ChatConversation -> ChatConversationScreen(convId = screen.convId, viewModel = mainViewModel)
                             is Screen.Auth -> AuthScreen(viewModel = mainViewModel)
+                            is Screen.Onboarding -> OnboardingScreen(viewModel = mainViewModel)
                             else -> HomeScreen(viewModel = mainViewModel)
                         }
                     }

@@ -399,7 +399,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun navigateTo(screen: Screen) {
         if (_currentScreen.value != screen) {
-            screenStack.add(screen)
+            if (screen == Screen.Home) {
+                screenStack.clear()
+                screenStack.add(Screen.Home)
+            } else {
+                screenStack.removeAll { it == screen }
+                screenStack.add(screen)
+            }
             _currentScreen.value = screen
             
             if (screen == Screen.Expenses || screen is Screen.TripDetail || screen is Screen.AiChat) {
@@ -421,6 +427,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return if (screenStack.size > 1) {
             screenStack.removeAt(screenStack.size - 1)
             _currentScreen.value = screenStack.last()
+            true
+        } else if (_currentScreen.value != Screen.Home) {
+            screenStack.clear()
+            screenStack.add(Screen.Home)
+            _currentScreen.value = Screen.Home
             true
         } else {
             false
